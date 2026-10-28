@@ -1,0 +1,18 @@
+{
+  "status": 422,
+  "body": {
+    "error": {
+      "code": "validation_error",
+      "message": "Parâmetros inválidos",
+      "details": [
+        {
+          "loc": [
+            "query",
+            "page_size"
+          ],
+          "msg": "Input should be less than or equal to 100"
+        }
+      ]
+    }
+  }
+}

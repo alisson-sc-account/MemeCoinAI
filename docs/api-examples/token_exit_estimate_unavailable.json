@@ -1,0 +1,27 @@
+{
+  "status": 200,
+  "body": {
+    "available": false,
+    "reason": "liquidez concentrada: profundidade depende das faixas de preço, não modelada",
+    "method_version": "slip-1",
+    "pool_model": "concentrated",
+    "pool_model_note": "liquidez concentrada: profundidade depende das faixas de preço, não modelada",
+    "spot_price_usd": 3.175e-06,
+    "liquidity_usd": 317610.79,
+    "fees_included": false,
+    "unknown_costs": [
+      "taxa do pool",
+      "taxa de prioridade/gas da rede",
+      "movimento de preço durante a execução"
+    ],
+    "scenarios": [],
+    "freshness": {
+      "observed_at": "2026-10-28T22:57:52.389466Z",
+      "age_seconds": 322.4,
+      "status": "delayed",
+      "source": "dexscreener",
+      "source_status": "ok"
+    },
+    "disclaimer": "Estimativa informativa baseada no último snapshot. Não é recomendação de investimento e não garante execução a esse preço."
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "status": 200,
+  "body": {
+    "sources": [
+      {
+        "source": "dexscreener",
+        "status": "ok",
+        "last_success_at": "2026-10-28T22:57:57.416534Z",
+        "last_error_at": null,
+        "last_error": null,
+        "consecutive_failures": 0,
+        "latency_ms_avg": 210.92158330914876,
+        "rate_limited_recent": 0
+      },
+      {
+        "source": "solana_rpc",
+        "status": "degraded",
+        "last_success_at": "2026-10-28T22:58:38.219838Z",
+        "last_error_at": "2026-10-28T22:58:38.219838Z",
+        "last_error": "rate limited (HTTP 429)",
+        "consecutive_failures": 0,
+        "latency_ms_avg": 535.8009777394019,
+        "rate_limited_recent": 3
+      }
+    ],
+    "recent_runs": [
+      {
+        "id": 6,
+        "source": "solana_rpc",
+        "job": "token_checks",
+        "started_at": "2026-10-28T22:58:24.981300Z",
+        "finished_at": "2026-10-28T22:58:38.219838Z",
+        "status": "partial",
+        "requests": 3,
+        "items_received": 1,
+        "items_stored": 2,
+        "duplicates": 0,
+        "errors": 1,
+        "rate_limited": 1,
+        "latency_ms_avg": 538.8273332888881,
+        "error_message": "rate limited (HTTP 429)"
+      },
+      {
+        "id": 5,
+        "source": "solana_rpc",
+        "job": "token_checks",
+        "started_at": "2026-10-28T22:58:11.822060Z",
+        "finished_at": "2026-10-28T22:58:24.924627Z",
+        "status": "partial",
+        "requests": 3,
+        "items_received": 1,
+        "items_stored": 2,
+        "duplicates": 0,
+        "errors": 1,
+        "rate_limited": 1,
+        "latency_ms_avg": 520.7306332886219,
+        "error_message": "rate limited (HTTP 429)"
+      }
+    ]
+  }
+}

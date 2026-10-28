@@ -1,0 +1,8 @@
+{
+  "status": 200,
+  "body": {
+    "id": 2,
+    "username": "alisson",
+    "must_change_password": true
+  }
+}

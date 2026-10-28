@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "body": {
+    "user": {
+      "id": 2,
+      "username": "alisson",
+      "must_change_password": true
+    },
+    "expires_at": "2026-10-31T23:03:14.305818Z"
+  }
+}

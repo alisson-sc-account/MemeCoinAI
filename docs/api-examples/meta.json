@@ -1,0 +1,57 @@
+{
+  "status": 200,
+  "body": {
+    "chains": [
+      "solana"
+    ],
+    "alert_types": {
+      "liquidity_drop": "risk",
+      "mint_authority_active": "risk",
+      "freeze_authority_active": "risk",
+      "risky_token_extensions": "risk",
+      "permission_change": "risk",
+      "holder_concentration": "risk",
+      "sell_pressure": "risk",
+      "risk_high": "risk",
+      "insufficient_data": "risk",
+      "volume_spike": "opportunity",
+      "opportunity_candidate": "opportunity",
+      "source_unavailable": "system"
+    },
+    "severities": [
+      "info",
+      "low",
+      "medium",
+      "high",
+      "critical"
+    ],
+    "risk_levels": [
+      "low",
+      "moderate",
+      "high",
+      "critical"
+    ],
+    "token_sort_fields": [
+      "first_seen_at",
+      "liquidity_usd",
+      "market_cap",
+      "observed_at",
+      "opportunity_score",
+      "pair_age_hours",
+      "price_change_h1",
+      "price_change_h24",
+      "risk_score",
+      "volume_h1",
+      "volume_h24"
+    ],
+    "prediction_targets": {
+      "up_20pct_6h": "Preço máximo observado ≥ +20% do preço de referência em até 6 h",
+      "down_30pct_6h": "Preço mínimo observado ≤ −30% do preço de referência em até 6 h"
+    },
+    "engine_version": "risk-1+opp-1+f-1",
+    "freshness_thresholds_seconds": {
+      "fresh": 180,
+      "delayed": 900
+    }
+  }
+}

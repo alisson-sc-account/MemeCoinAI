@@ -1,0 +1,44 @@
+{
+  "status": 200,
+  "body": {
+    "available": true,
+    "reason": null,
+    "method_version": "slip-1",
+    "pool_model": "constant_product",
+    "pool_model_note": "pool de produto constante (x*y=k)",
+    "spot_price_usd": 0.001891,
+    "liquidity_usd": 313809.91,
+    "fees_included": false,
+    "unknown_costs": [
+      "taxa do pool",
+      "taxa de prioridade/gas da rede",
+      "movimento de preço durante a execução"
+    ],
+    "scenarios": [
+      {
+        "position_usd": 500.0,
+        "tokens_sold": 264410.36488630355,
+        "price_impact": 0.003142,
+        "estimated_avg_price_usd": 0.0018850578304089132,
+        "estimated_received_usd": 498.43,
+        "share_of_pool_base": 0.003152
+      },
+      {
+        "position_usd": 5000.0,
+        "tokens_sold": 2644103.6488630353,
+        "price_impact": 0.030559,
+        "estimated_avg_price_usd": 0.001833212594451881,
+        "estimated_received_usd": 4847.2,
+        "share_of_pool_base": 0.031522
+      }
+    ],
+    "freshness": {
+      "observed_at": "2026-10-28T22:57:57.081501Z",
+      "age_seconds": 317.9,
+      "status": "delayed",
+      "source": "dexscreener",
+      "source_status": "ok"
+    },
+    "disclaimer": "Estimativa informativa baseada no último snapshot. Não é recomendação de investimento e não garante execução a esse preço."
+  }
+}

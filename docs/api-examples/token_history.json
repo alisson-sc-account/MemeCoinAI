@@ -1,0 +1,28 @@
+{
+  "status": 200,
+  "body": {
+    "token": {
+      "chain_id": "solana",
+      "address": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+      "symbol": "Bonk",
+      "name": "Bonk",
+      "image_url": "https://cdn.dexscreener.com/cms/images/ba03c0370670d176dc33bbd212eb023337a460ad7edfa053ca96ae22f31c3dcf?width=800&height=800&quality=95&format=auto"
+    },
+    "pair_address": "5zpyutJu9ee6jFymDGoK7F6S5Kczqtc9FomP3ueKuyA9",
+    "range": "1h",
+    "points": [
+      {
+        "t": "2026-10-28T22:57:52.389466Z",
+        "price_usd": 3.175e-06,
+        "liquidity_usd": 317610.79,
+        "market_cap": 282224719.0,
+        "volume_h1": 11924.78,
+        "buys_h1": 204,
+        "sells_h1": 250
+      }
+    ],
+    "downsampled": false,
+    "source": "dexscreener",
+    "note": "Pontos são snapshots coletados por este sistema (não candles OHLC da fonte)."
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "status": 200,
+  "body": {
+    "status": "ok",
+    "database": "ok",
+    "version": "0.1.0",
+    "time": "2026-10-28T23:03:13.936054Z"
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "status": 200,
+  "body": [
+    {
+      "target": "up_20pct_6h",
+      "model_id": "heuristic-logit",
+      "model_version": "1",
+      "calibrated": false,
+      "total": 16,
+      "pending": 16,
+      "evaluated": 0,
+      "unevaluable": 0,
+      "observed_rate": null,
+      "brier_model": null,
+      "brier_model_where_baseline": null,
+      "brier_baseline": null,
+      "baseline_samples": 0,
+      "thresholds": [
+        {
+          "threshold": 0.3,
+          "signals": 0,
+          "true_positives": 0,
+          "false_positives": 0,
+          "precision": null,
+          "recall": null
+        },
+        {
+          "threshold": 0.5,
+          "signals": 0,
+          "true_positives": 0,
+          "false_positives": 0,
+          "precision": null,
+          "recall": null
+        },
+        {
+          "threshold": 0.7,
+          "signals": 0,
+          "true_positives": 0,
+          "false_positives": 0,
+          "precision": null,
+          "recall": null
+        }
+      ],
+      "calibration_bins": [],
+      "by_liquidity": [
+        {
+          "bucket": "<20k",
+          "count": 0,
+          "observed_rate": null,
+          "brier": null
+        },
+        {
+          "bucket": "20k-100k",
+          "count": 0,
+          "observed_rate": null,
+          "brier": null
+        },
+        {
+          "bucket": ">=100k",
+          "count": 0,
+          "observed_rate": null,
+          "brier": null
+        }
+      ],
+      "sufficient_sample": false,
+      "notes": [
+        "Coeficientes a priori, sem calibração; probabilidades não devem ser lidas como frequências reais.",
+        "Retorno líquido hipotético (custos/slippage) ainda não calculado."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "status": 200,
+  "body": {
+    "items": [
+      {
+        "id": 47,
+        "alert_type": "risk_high",
+        "category": "risk",
+        "severity": "high",
+        "status": "open",
+        "title": "Risco elevado",
+        "reason": "Score de risco 50/100.",
+        "evidence": {
+          "risk_score": 50,
+          "factors": [
+            "L1_liquidity_very_low",
+            "D3_technical_unchecked",
+            "D4_concentration_unchecked"
+          ]
+        },
+        "confidence": 0.475,
+        "rule_id": "risk_high",
+        "rule_version": "alerts-1",
+        "event_at": "2026-10-28T22:57:57.393035Z",
+        "detected_at": "2026-10-28T22:57:57.683977Z",
+        "last_occurrence_at": "2026-10-28T22:57:57.683977Z",
+        "occurrences": 1,
+        "status_changed_at": null,
+        "token": {
+          "chain_id": "solana",
+          "address": "Bo9fcNZQ8J8BQP69Rbqt6sPpfwqtqh2KMy48ZBWdyvVb",
+          "symbol": "ORVU",
+          "name": "ORVU",
+          "image_url": "https://cdn.dexscreener.com/cms/images/isRQIrawB8dHWV-u?width=800&height=800&quality=95&format=auto"
+        },
+        "pair_address": "AzgGD1ZAD1ThpodWfcpAT2jKsnUzzjcX2eFgxUzZEpx4",
+        "link": "/tokens/solana/Bo9fcNZQ8J8BQP69Rbqt6sPpfwqtqh2KMy48ZBWdyvVb"
+      },
+      {
+        "id": 34,
+        "alert_type": "risk_high",
+        "category": "risk",
+        "severity": "high",
+        "status": "open",
+        "title": "Risco elevado",
+        "reason": "Score de risco 65/100.",
+        "evidence": {
+          "risk_score": 65,
+          "factors": [
+            "L1_liquidity_very_low",
+            "A4_price_crash",
+            "D3_technical_unchecked",
+            "D4_concentration_unchecked"
+          ]
+        },
+        "confidence": 0.475,
+        "rule_id": "risk_high",
+        "rule_version": "alerts-1",
+        "event_at": "2026-10-28T22:57:57.081501Z",
+        "detected_at": "2026-10-28T22:57:57.582018Z",
+        "last_occurrence_at": "2026-10-28T22:57:57.582018Z",
+        "occurrences": 1,
+        "status_changed_at": null,
+        "token": {
+          "chain_id": "solana",
+          "address": "4KLa5LH7UgGFP1BcsTKgeRSZg1dQtGzUEbkaXAE9pump",
+          "symbol": "Land",
+          "name": "Landcoin",
+          "image_url": "https://cdn.dexscreener.com/cms/images/fBxVFeFVPmxh2eVq?width=800&height=800&quality=95&format=auto"
+        },
+        "pair_address": "CEVXJBHdja3akgqHAUeMa2c91ExK6MfruZnwrauB1bzV",
+        "link": "/tokens/solana/4KLa5LH7UgGFP1BcsTKgeRSZg1dQtGzUEbkaXAE9pump"
+      }
+    ],
+    "total": 10,
+    "page": 1,
+    "page_size": 2
+  }
+}

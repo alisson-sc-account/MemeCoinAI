@@ -1,0 +1,112 @@
+{
+  "status": 200,
+  "body": {
+    "generated_at": "2026-10-28T23:03:14.546236Z",
+    "tokens_tracked": 40,
+    "tokens_with_fresh_data": 0,
+    "alerts_open_total": 47,
+    "alerts_open_by_severity": {
+      "info": 2,
+      "low": 33,
+      "medium": 2,
+      "high": 9,
+      "critical": 1
+    },
+    "critical_risk_tokens": 1,
+    "opportunity_candidates": 0,
+    "aggregate_liquidity_usd": null,
+    "aggregate_volume_h24_usd": null,
+    "predictions": {
+      "pending": 32,
+      "evaluated": 0,
+      "unevaluable": 0
+    },
+    "last_refresh_at": "2026-10-28T22:57:57.393035Z",
+    "sources": [
+      {
+        "source": "dexscreener",
+        "status": "ok",
+        "last_success_at": "2026-10-28T22:57:57.416534Z",
+        "last_error_at": null,
+        "last_error": null,
+        "consecutive_failures": 0,
+        "latency_ms_avg": 210.92158330914876,
+        "rate_limited_recent": 0
+      },
+      {
+        "source": "solana_rpc",
+        "status": "degraded",
+        "last_success_at": "2026-10-28T22:58:38.219838Z",
+        "last_error_at": "2026-10-28T22:58:38.219838Z",
+        "last_error": "rate limited (HTTP 429)",
+        "consecutive_failures": 0,
+        "latency_ms_avg": 535.8009777394019,
+        "rate_limited_recent": 3
+      }
+    ],
+    "top_opportunities": [
+      {
+        "token": {
+          "chain_id": "solana",
+          "address": "Bv1a7cEj5aRnJQhMw4kRQqAFesMSd5LwcDnUzq52BMmr",
+          "symbol": "FLOAT",
+          "name": "FLOAT",
+          "image_url": "https://cdn.dexscreener.com/cms/images/fzmhr78Gzxx6ZJE2?width=800&height=800&quality=95&format=auto"
+        },
+        "risk_score": 15.0,
+        "risk_level": "low",
+        "opportunity_score": 56.71,
+        "liquidity_usd": 313809.91,
+        "freshness_status": "delayed",
+        "link": "/tokens/solana/Bv1a7cEj5aRnJQhMw4kRQqAFesMSd5LwcDnUzq52BMmr"
+      },
+      {
+        "token": {
+          "chain_id": "solana",
+          "address": "DPe74dTCW7aFSCwCK4ZFWJJ4BL7uVJ9i4P58VUWJpump",
+          "symbol": "ZMINER",
+          "name": "ZCASH MINER",
+          "image_url": "https://cdn.dexscreener.com/cms/images/KEAHZN7YFuoL1fJ_?width=800&height=800&quality=95&format=auto"
+        },
+        "risk_score": 38.0,
+        "risk_level": "moderate",
+        "opportunity_score": 40.0,
+        "liquidity_usd": 20072.29,
+        "freshness_status": "delayed",
+        "link": "/tokens/solana/DPe74dTCW7aFSCwCK4ZFWJJ4BL7uVJ9i4P58VUWJpump"
+      }
+    ],
+    "top_risks": [
+      {
+        "token": {
+          "chain_id": "solana",
+          "address": "HJGAKkCoJrFVisqGcLXK4VhX9GtYdoc9Q4hearYmpump",
+          "symbol": "BangBus",
+          "name": "The Bang Bus",
+          "image_url": "https://cdn.dexscreener.com/cms/images/Lm_CH0kUE52bg94m?width=800&height=800&quality=95&format=auto"
+        },
+        "risk_score": 75.0,
+        "risk_level": "critical",
+        "opportunity_score": 11.19,
+        "liquidity_usd": 3939.15,
+        "freshness_status": "delayed",
+        "link": "/tokens/solana/HJGAKkCoJrFVisqGcLXK4VhX9GtYdoc9Q4hearYmpump"
+      },
+      {
+        "token": {
+          "chain_id": "solana",
+          "address": "J5TL16xgiwEKHHZKu4cmJLAY9SkDEhf62hQop12zuijV",
+          "symbol": "FRAGOSTI",
+          "name": "FRAGOSTI",
+          "image_url": "https://cdn.dexscreener.com/cms/images/kGSb825KkYmR6O6D?width=800&height=800&quality=95&format=auto"
+        },
+        "risk_score": 72.0,
+        "risk_level": "high",
+        "opportunity_score": 0.0,
+        "liquidity_usd": null,
+        "freshness_status": "delayed",
+        "link": "/tokens/solana/J5TL16xgiwEKHHZKu4cmJLAY9SkDEhf62hQop12zuijV"
+      }
+    ]
+  }
+}

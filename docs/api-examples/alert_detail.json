@@ -1,0 +1,45 @@
+{
+  "status": 200,
+  "body": {
+    "id": 50,
+    "alert_type": "insufficient_data",
+    "category": "risk",
+    "severity": "low",
+    "status": "open",
+    "title": "Dados insuficientes para avaliar",
+    "reason": "Menos da metade das verificações planejadas pôde ser executada.",
+    "evidence": {
+      "checks_not_performed": [
+        {
+          "check": "liquidity_history",
+          "reason": "histórico próprio insuficiente na última hora"
+        },
+        {
+          "check": "mint_authorities",
+          "reason": "verificação ainda não executada"
+        },
+        {
+          "check": "holder_concentration",
+          "reason": "verificação ainda não executada"
+        }
+      ]
+    },
+    "confidence": 1.0,
+    "rule_id": "insufficient_data",
+    "rule_version": "alerts-1",
+    "event_at": "2026-10-28T22:57:57.393035Z",
+    "detected_at": "2026-10-28T22:57:57.701907Z",
+    "last_occurrence_at": "2026-10-28T22:57:57.701907Z",
+    "occurrences": 1,
+    "status_changed_at": null,
+    "token": {
+      "chain_id": "solana",
+      "address": "4ec7Lf7JuCYQVQnUJCzpW5YvaPMNEAeqDRwGcU5n9GGJ",
+      "symbol": "SATOSHI",
+      "name": "SATOSHI NAKAMOTO",
+      "image_url": "https://cdn.dexscreener.com/cms/images/0zXdjyQyIHJdcYE2?width=800&height=800&quality=95&format=auto"
+    },
+    "pair_address": "91gJFA4mgVQS5Kcr6uGh9ToqCrJK3jiSpTPNHKzDQhnx",
+    "link": "/tokens/solana/4ec7Lf7JuCYQVQnUJCzpW5YvaPMNEAeqDRwGcU5n9GGJ"
+  }
+}

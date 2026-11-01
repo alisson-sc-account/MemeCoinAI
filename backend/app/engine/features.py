@@ -98,6 +98,8 @@ def compute_features(
         "volume_h24": cur.volume_h24,
         "buys_h1": cur.buys_h1,
         "sells_h1": cur.sells_h1,
+        "buys_m5": cur.buys_m5,
+        "sells_m5": cur.sells_m5,
         "txns_m5": txns_m5,
         "txns_h1": txns_h1,
         "txns_h6": txns_h6,

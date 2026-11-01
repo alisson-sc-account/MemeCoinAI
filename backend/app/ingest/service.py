@@ -3,9 +3,9 @@ import logging
 from collections import defaultdict
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, null, select, update
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -17,9 +17,11 @@ from app.ingest.normalize import (
     normalize_address,
     normalize_pair,
 )
-from app.models import CollectorRun, Pair, PairSnapshot, Token
+from app.models import CollectorRun, Pair, PairSnapshot, Position, Signal, Token
 from app.sources import dexscreener
 from app.sources.dexscreener import MAX_ADDRESSES_PER_REQUEST, DexScreenerClient
+from app.sources.geckoterminal import MAX_PAGES, GeckoTerminalClient, parse_pool
+from app.sources.jupiter_tokens import RANKINGS, JupiterTokensClient
 from app.sources.http import FetchResult
 
 log = logging.getLogger(__name__)
@@ -27,19 +29,26 @@ log = logging.getLogger(__name__)
 
 @contextmanager
 def collector_run(db: Session, source: str, job: str) -> Iterator[CollectorRun]:
-    run = CollectorRun(source=source, job=job, started_at=utcnow())
-    db.add(run)
-    db.flush()
+    """Registra uma execução de coleta.
+
+    O registro só é gravado no FIM: gravar no início abria uma transação de escrita
+    no SQLite que ficava presa durante as chamadas de rede (RPC com espera por 429),
+    bloqueando a API ("database is locked"). Os contadores ficam em memória até lá.
+    """
+    run = CollectorRun(source=source, job=job, started_at=utcnow(), status="running", requests=0,
+                       items_received=0, items_stored=0, duplicates=0, errors=0, rate_limited=0)
     latencies: list[float] = []
     run._latencies = latencies  # type: ignore[attr-defined]
     try:
         yield run
     except Exception as exc:  # registra e propaga
+        db.rollback()
         run.status = "error"
         run.errors += 1
         run.error_message = f"{type(exc).__name__}: {exc}"[:2000]
         raise
     finally:
+        db.add(run)
         run.finished_at = utcnow()
         if latencies:
             run.latency_ms_avg = sum(latencies) / len(latencies)
@@ -86,7 +95,7 @@ def _upsert_pair(db: Session, np: NormalizedPair, token: Token, now: datetime) -
     return pair
 
 
-def _store_snapshot(db: Session, pair: Pair, np: NormalizedPair, received_at: datetime) -> bool:
+def _store_snapshot(db: Session, pair: Pair, np: NormalizedPair, received_at: datetime, keep_raw: bool = False) -> bool:
     """Grava snapshot. Retorna False se idêntico ao último (resposta em cache)."""
     last_hash = db.scalar(
         select(PairSnapshot.payload_hash)
@@ -106,7 +115,7 @@ def _store_snapshot(db: Session, pair: Pair, np: NormalizedPair, received_at: da
             normalizer_version=NORMALIZER_VERSION,
             payload_hash=np.payload_hash,
             missing_fields=np.missing_fields,
-            raw=np.raw,
+            raw=np.raw if keep_raw or get_settings().store_raw_payload else None,
             **np.metrics,
         )
     )
@@ -114,7 +123,8 @@ def _store_snapshot(db: Session, pair: Pair, np: NormalizedPair, received_at: da
 
 
 def ingest_pairs(
-    db: Session, run: CollectorRun, raw_pairs: list, tokens_by_key: dict[tuple[str, str], Token], received_at: datetime
+    db: Session, run: CollectorRun, raw_pairs: list, tokens_by_key: dict[tuple[str, str], Token], received_at: datetime,
+    keep_raw: bool = False,
 ) -> set[int]:
     """Normaliza e persiste pares cujo token-base está em `tokens_by_key`.
 
@@ -142,11 +152,12 @@ def ingest_pairs(
         if np.image_url:
             token.image_url = np.image_url
         token.last_refreshed_at = received_at
-        if _store_snapshot(db, pair, np, received_at):
+        if _store_snapshot(db, pair, np, received_at, keep_raw):
             run.items_stored += 1
             touched.add(token.id)
         else:
             run.duplicates += 1
+        token.heat = max(token.heat if token.id in best_liq else 0.0, np.metrics.get("volume_h1") or 0.0)
         liq = np.metrics.get("liquidity_usd") or 0.0
         if token.id not in best_liq or liq > best_liq[token.id][0]:
             best_liq[token.id] = (liq, pair.id)
@@ -157,14 +168,41 @@ def ingest_pairs(
     return touched
 
 
-def refresh_tracked(db: Session, client: DexScreenerClient | None = None) -> set[int]:
+NEW_TOKENS_PER_CYCLE = 300  # novatos em massa não podem empurrar as moedas quentes para fora
+
+
+def split_hot_cold(db: Session, boosted: set[int] | None = None) -> tuple[list[Token], list[Token]]:
+    """Quentes: posições, sinais de compra/venda, radar, novatos e mais volume. Frios: o resto, do mais antigo."""
+    s = get_settings()
+    tokens = db.scalars(select(Token).where(Token.is_tracked.is_(True))).all()
+    urgent = set(db.scalars(select(Position.token_id)).all()) | (boosted or set())
+    urgent |= set(db.scalars(select(Signal.token_id).where(Signal.status == "active", Signal.action.in_(("buy", "sell")))).all())
+    first = [t for t in tokens if t.id in urgent]
+    chosen = {t.id for t in first}
+    new = [t for t in tokens if t.id not in chosen and t.last_refreshed_at is None][:NEW_TOKENS_PER_CYCLE]
+    first += new
+    chosen |= {t.id for t in new}
+    rest = sorted((t for t in tokens if t.id not in chosen), key=lambda t: t.heat or 0.0, reverse=True)
+    room = max(0, s.refresh_hot_tokens - len(first))
+    # Sem data (novato além da cota) conta como o mais antigo.
+    cold = sorted(rest[room:], key=lambda t: t.last_refreshed_at.timestamp() if t.last_refreshed_at else 0.0)
+    return first + rest[:room], cold
+
+
+def _refresh_selection(db: Session) -> list[Token]:
+    s = get_settings()
+    hot, cold = split_hot_cold(db)
+    return (hot + cold)[: s.refresh_requests_per_cycle * MAX_ADDRESSES_PER_REQUEST]
+
+
+def refresh_tracked(db: Session, client: DexScreenerClient | None = None, tokens: list[Token] | None = None, job: str = "refresh") -> set[int]:
     client = client or DexScreenerClient()
     touched: set[int] = set()
-    tokens = db.scalars(select(Token).where(Token.is_tracked.is_(True))).all()
+    tokens = _refresh_selection(db) if tokens is None else tokens
     by_chain: dict[str, list[Token]] = defaultdict(list)
     for t in tokens:
         by_chain[t.chain_id].append(t)
-    with collector_run(db, dexscreener.SOURCE_NAME, "refresh") as run:
+    with collector_run(db, dexscreener.SOURCE_NAME, job) as run:
         for chain_id, chain_tokens in by_chain.items():
             for i in range(0, len(chain_tokens), MAX_ADDRESSES_PER_REQUEST):
                 batch = chain_tokens[i : i + MAX_ADDRESSES_PER_REQUEST]
@@ -202,15 +240,57 @@ def track_token(
             db.add(token)
             db.flush()
         token.is_tracked = True
-        ingest_pairs(db, run, bases, {(chain_id, address): token}, utcnow())
+        ingest_pairs(db, run, bases, {(chain_id, address): token}, utcnow(), keep_raw=True)
     return token, res
 
 
-def discover(db: Session, client: DexScreenerClient | None = None) -> list[Token]:
-    """Adiciona tokens recentes (profiles/boosts) das redes configuradas.
+def _add_token(db: Session, run: CollectorRun, chains: set[str], chain_id: str | None, address: str | None, via: str) -> Token | None:
+    if not chain_id or chain_id not in chains or not address:
+        return None
+    address = normalize_address(chain_id, address)
+    if db.scalar(select(Token.id).where(Token.chain_id == chain_id, Token.address == address)):
+        run.duplicates += 1
+        return None
+    tok = Token(chain_id=chain_id, address=address, discovered_via=via, first_seen_at=utcnow())
+    db.add(tok)
+    db.flush()
+    run.items_stored += 1
+    return tok
 
-    Viés conhecido: profiles e boosts são listas pagas/autodeclaradas pelo
-    projeto; não representam todo o mercado. Registrado em `discovered_via`.
+
+DISCOVERY_PARTS = ("lists", "search", "gecko", "jupiter")
+
+
+def scout(db: Session, name: str, client: JupiterTokensClient | None = None) -> tuple[set[int], int]:
+    """Radar: moedas das listas de "mais negociados agora". Devolve (ids para promover, novas adicionadas)."""
+    s = get_settings()
+    res = (client or JupiterTokensClient()).listing(name)
+    if not res.ok:
+        log.warning("radar %s: %s", name, res.error)
+        return set(), 0
+    mints = [i.get("id") for i in res.data if isinstance(i, dict) and i.get("id") and (i.get("liquidity") or 0) >= s.discovery_min_liquidity_usd]
+    known = dict(db.execute(select(Token.address, Token.id).where(Token.chain_id == "solana", Token.address.in_(mints))).all()) if mints else {}
+    ids, added = set(known.values()), 0
+    tracked = db.scalar(select(func.count()).select_from(Token).where(Token.is_tracked.is_(True))) or 0
+    for mint in mints:
+        if mint not in known and tracked + added < s.max_tracked_tokens:
+            tok = Token(chain_id="solana", address=mint, discovered_via="jupiter_scout", first_seen_at=utcnow())
+            db.add(tok)
+            db.flush()
+            ids.add(tok.id)
+            added += 1
+    db.commit()
+    return ids, added
+
+
+def discover(db: Session, client: DexScreenerClient | None = None, parts: tuple[str, ...] = DISCOVERY_PARTS) -> list[Token]:
+    """Descobre tokens novos nas redes configuradas.
+
+    Três origens, todas gratuitas e com cobertura parcial (a fonte NÃO expõe um
+    endpoint com todos os tokens):
+    - perfis recentes e impulsionados (listas autodeclaradas/pagas pelo projeto);
+    - buscas por termos comuns, rotacionadas a cada ciclo (até 30 pares cada).
+    A origem fica registrada em `discovered_via`, e o viés está documentado.
     """
     s = get_settings()
     client = client or DexScreenerClient()
@@ -219,7 +299,16 @@ def discover(db: Session, client: DexScreenerClient | None = None) -> list[Token
     with collector_run(db, dexscreener.SOURCE_NAME, "discover") as run:
         tracked = db.scalar(select(func.count()).select_from(Token).where(Token.is_tracked.is_(True))) or 0
         capacity = max(0, s.max_tracked_tokens - tracked)
-        for via, fetch in (("dexscreener_profiles", client.latest_profiles), ("dexscreener_boosts", client.latest_boosts)):
+        if capacity <= 0:
+            return added
+
+        for via, fetch in () if "lists" not in parts else (
+            ("dexscreener_profiles", client.latest_profiles),
+            ("dexscreener_boosts", client.latest_boosts),
+            ("dexscreener_boosts_top", client.top_boosts),
+        ):
+            if capacity <= 0:
+                break
             res = fetch()
             record_fetch(run, res)
             if not res.ok:
@@ -228,21 +317,156 @@ def discover(db: Session, client: DexScreenerClient | None = None) -> list[Token
                 run.items_received += 1
                 if capacity <= 0:
                     break
-                chain_id, addr = item.get("chainId"), item.get("tokenAddress")
-                if chain_id not in chains or not addr:
+                tok = _add_token(db, run, chains, item.get("chainId"), item.get("tokenAddress"), via)
+                if tok:
+                    added.append(tok)
+                    capacity -= 1
+            db.commit()  # libera a trava de escrita antes da próxima chamada de rede
+
+        # Buscas rotacionadas: a cada ciclo usa um bloco diferente de termos.
+        queries = s.discovery_query_list
+        if "search" in parts and queries and capacity > 0:
+            per_cycle = max(1, s.discovery_queries_per_cycle)
+            offset = (db.scalar(select(func.count()).select_from(CollectorRun).where(CollectorRun.job == "discover")) or 0) * per_cycle
+            for i in range(per_cycle):
+                if capacity <= 0:
+                    break
+                res = client.search(queries[(offset + i) % len(queries)])
+                record_fetch(run, res)
+                if not res.ok:
                     continue
-                addr = normalize_address(chain_id, addr)
-                exists = db.scalar(select(Token.id).where(Token.chain_id == chain_id, Token.address == addr))
-                if exists:
-                    run.duplicates += 1
+                for pair in res.data:
+                    run.items_received += 1
+                    if capacity <= 0:
+                        break
+                    base = (pair or {}).get("baseToken") or {}
+                    tok = _add_token(db, run, chains, pair.get("chainId"), base.get("address"), "dexscreener_search")
+                    if tok:
+                        added.append(tok)
+                        capacity -= 1
+                db.commit()  # idem: uma transação curta por busca
+
+        # GeckoTerminal: pools novas/em alta. Pool quase sem liquidez não gasta vaga.
+        if "gecko" in parts and capacity > 0 and s.geckoterminal_pages_per_cycle > 0:
+            gecko = GeckoTerminalClient()
+            pages = min(s.geckoterminal_pages_per_cycle, MAX_PAGES)
+            for chain in chains:
+                for kind in ("trending_pools", "new_pools"):
+                    for page in range(1, pages + 1):
+                        if capacity <= 0:
+                            break
+                        res = gecko.pools(chain, kind, page)
+                        if not res.ok:  # fonte auxiliar: falha dela não marca o DEX Screener como degradado
+                            log.warning("geckoterminal %s p%d: %s", kind, page, res.error)
+                            break
+                        for pool in res.data:
+                            run.items_received += 1
+                            parsed = parse_pool(pool, chain)
+                            if capacity <= 0 or not parsed or (parsed[1] or 0) < s.discovery_min_liquidity_usd:
+                                continue
+                            tok = _add_token(db, run, chains, chain, parsed[0], f"geckoterminal_{kind}")
+                            if tok:
+                                added.append(tok)
+                                capacity -= 1
+                        db.commit()
+
+        # Listas da Jupiter: mais negociados, em alta e recém-criados (só Solana).
+        if "jupiter" in parts and capacity > 0 and "solana" in chains:
+            jupiter = JupiterTokensClient()
+            offset = (db.scalar(select(func.count()).select_from(CollectorRun).where(CollectorRun.job == "discover")) or 0)
+            for name in ("recent", RANKINGS[offset % len(RANKINGS)]):
+                if capacity <= 0:
+                    break
+                res = jupiter.listing(name)
+                if not res.ok:
+                    log.warning("jupiter tokens %s: %s", name, res.error)
                     continue
-                tok = Token(chain_id=chain_id, address=addr, discovered_via=via, first_seen_at=utcnow())
-                db.add(tok)
-                db.flush()
-                added.append(tok)
-                run.items_stored += 1
-                capacity -= 1
+                for item in res.data:
+                    run.items_received += 1
+                    if capacity <= 0 or not isinstance(item, dict) or (item.get("liquidity") or 0) < s.discovery_min_liquidity_usd:
+                        continue
+                    tok = _add_token(db, run, chains, "solana", item.get("id"), "jupiter_tokens")
+                    if tok:
+                        added.append(tok)
+                        capacity -= 1
+                db.commit()
     return added
+
+
+def apply_raw_retention(db: Session, batch: int = 5000) -> int:
+    """Apaga só o payload bruto antigo (dados normalizados ficam). Transações curtas por bloco."""
+    cut = utcnow() - timedelta(days=get_settings().raw_payload_retention_days)
+    total = 0
+    while True:
+        ids = db.scalars(select(PairSnapshot.id).where(PairSnapshot.raw.is_not(None), PairSnapshot.received_at < cut).limit(batch)).all()
+        if not ids:
+            return total
+        db.execute(update(PairSnapshot).where(PairSnapshot.id.in_(ids)).values(raw=null()))
+        db.commit()
+        total += len(ids)
+
+
+def prune_inactive(db: Session) -> int:
+    """Para de monitorar tokens sem vida, liberando orçamento de coleta.
+
+    Nunca remove tokens adicionados à mão (`watchlist`). O histórico é mantido:
+    apenas `is_tracked` passa a falso, e o token volta se for adicionado de novo.
+    """
+    s = get_settings()
+    cutoff = utcnow() - timedelta(hours=s.prune_after_hours)
+    candidates = db.scalars(
+        select(Token).where(
+            Token.is_tracked.is_(True), Token.discovered_via != "watchlist", Token.first_seen_at < cutoff
+        )
+    ).all()
+    if not candidates:
+        return 0
+    protected = set(db.scalars(select(Position.token_id)).all())
+    pair_ids = [t.primary_pair_id for t in candidates if t.primary_pair_id]
+    snaps = {}
+    if pair_ids:
+        sub = (
+            select(PairSnapshot.pair_id, func.max(PairSnapshot.received_at).label("mx"))
+            .where(PairSnapshot.pair_id.in_(pair_ids))
+            .group_by(PairSnapshot.pair_id)
+            .subquery()
+        )
+        snaps = {
+            r.pair_id: r
+            for r in db.scalars(
+                select(PairSnapshot).join(sub, (PairSnapshot.pair_id == sub.c.pair_id) & (PairSnapshot.received_at == sub.c.mx))
+            )
+        }
+    pruned = 0
+    for t in candidates:
+        if t.id in protected:
+            continue
+        snap = snaps.get(t.primary_pair_id) if t.primary_pair_id else None
+        if snap is None:
+            dead = True  # nenhum par encontrado pela fonte desde que entrou
+        else:
+            liq, vol = snap.liquidity_usd, snap.volume_h24
+            dead = (liq is not None and liq < s.prune_min_liquidity_usd) and (vol is not None and vol < s.prune_min_volume_h24_usd)
+        if dead:
+            t.is_tracked = False
+            pruned += 1
+    db.commit()
+    return pruned
+
+
+def apply_snapshot_retention(db: Session, batch: int = 5000) -> int:
+    """Apaga snapshots além da retenção, exceto de moedas com posição."""
+    cut = utcnow() - timedelta(days=get_settings().snapshot_retention_days)
+    keep = set(db.scalars(select(Position.token_id)).all())
+    keep_pairs = select(Pair.id).where(Pair.base_token_id.in_(keep))
+    total = 0
+    while True:
+        ids = db.scalars(select(PairSnapshot.id).where(PairSnapshot.received_at < cut, PairSnapshot.pair_id.not_in(keep_pairs)).limit(batch)).all()
+        if not ids:
+            return total
+        db.execute(delete(PairSnapshot).where(PairSnapshot.id.in_(ids)))
+        db.commit()
+        total += len(ids)
 
 
 def source_status(db: Session, source: str) -> dict:

@@ -95,9 +95,9 @@ def cmd_checks(args):
 
 
 def cmd_evaluate(_args):
-    from app.engine.predict import evaluate_due
+    from app.worker import job_evaluate
 
-    print({"evaluated": evaluate_due(session_factory()())})
+    print(job_evaluate(session_factory()()))
 
 
 def cmd_retention(args):

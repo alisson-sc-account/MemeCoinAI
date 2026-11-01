@@ -1,0 +1,34 @@
+.panel { display: grid; gap: var(--space-3); padding: var(--space-4); background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.panel.danger { border-color: var(--risk-critical); background: color-mix(in srgb, var(--risk-critical) 9%, var(--surface-1)); }
+.panel.caution { border-color: var(--risk-moderate); }
+.top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: var(--space-3); }
+.verdict { margin: 2px 0; font-size: 26px; line-height: 32px; font-weight: 700; letter-spacing: -.02em; }
+.danger .verdict { color: var(--risk-critical); }
+.caution .verdict { color: var(--risk-moderate); }
+.why { margin: 0; }
+.meta { color: var(--text-subtle); font-size: 12px; }
+.dangerText { color: var(--risk-critical); }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13px; color: var(--text-muted); }
+.checks li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 6px; }
+.checks b { color: var(--text); font-weight: 600; }
+.mark { font-weight: 700; text-align: center; }
+.s_ok .mark { color: var(--positive); }
+.s_warn .mark { color: var(--risk-moderate); }
+.s_danger .mark { color: var(--risk-critical); }
+.s_unknown .mark { color: var(--text-subtle); }
+.s_danger b { color: var(--risk-critical); }
+.map { margin: 0; display: grid; gap: var(--space-2); min-width: 0; }
+.map svg { width: 100%; height: auto; background: var(--surface-2); border-radius: var(--radius-sm); }
+circle.insider, .legend i.insider { fill: var(--risk-critical); background: var(--risk-critical); }
+circle.cluster, .legend i.cluster { fill: var(--risk-high); background: var(--risk-high); }
+circle.fresh, .legend i.fresh { fill: var(--risk-moderate); background: var(--risk-moderate); }
+circle.old, .legend i.old { fill: #6b7280; background: #6b7280; }
+circle.unknownWallet, .legend i.unknownWallet { fill: #3e3e42; background: #3e3e42; }
+.link { stroke: var(--risk-high); stroke-width: 1; opacity: .6; }
+.bubbleText { fill: #fff; font-size: 11px; font-weight: 600; pointer-events: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; color: var(--text-muted); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.limits { margin: var(--space-2) 0 0; padding-left: 18px; font-size: 12px; color: var(--text-muted); }
+@media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } }

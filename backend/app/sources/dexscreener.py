@@ -52,6 +52,9 @@ class DexScreenerClient:
     def latest_boosts(self) -> FetchResult:
         return self._list("/token-boosts/latest/v1")
 
+    def top_boosts(self) -> FetchResult:
+        return self._list("/token-boosts/top/v1")
+
     def _list(self, path: str) -> FetchResult:
         res = self.client.request("GET", path, _slow_limiter)
         if res.ok and not isinstance(res.data, list):

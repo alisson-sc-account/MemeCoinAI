@@ -92,15 +92,9 @@ Credenciais de desenvolvimento: usuários `natan` e `alisson`, com a senha inici
 
 ## Páginas e comportamento
 
-Implementar exatamente o que está em `FRONTEND_SPEC.md` §2–§21. Ordem sugerida de entrega (cada etapa deve ser utilizável e testada antes da próxima):
+Manter **exatamente quatro abas principais**, conforme `FRONTEND_SPEC.md` §2–§3 e `frontend/src/App.tsx`: Dashboard (`/`), Compre agora (`/compre-agora`, `GET /opportunities`), Alertas (`/alerts`) e Configurações (`/settings`, saldo simulado, som, fontes/custo e senha). As rotas `/tokens`, `/tokens/:chainId/:address`, `/predictions` e `/system` são páginas internas, sem aba; `/account` redireciona para `/settings`.
 
-1. Fundação: Vite + TS + tokens CSS + fontes + `AppShell` responsivo (sidebar/trilho/drawer) + cliente API + `gen:api` + guarda de autenticação + `/login` + `/account`.
-2. `/tokens` (Explorador) com filtros na URL, tabela/cards, paginação, modal "Adicionar token".
-3. `/tokens/:chainId/:address` (todas as seções do §13, gráfico).
-4. `/alerts` + `/alerts/:id` + `NotificationBell`.
-5. `/` Visão geral.
-6. `/predictions` e `/system`.
-7. Revisão de responsividade, acessibilidade e estados (vazio/erro/carregando/desatualizado).
+Páginas, conteúdo e endpoints devem refletir o contrato vigente em `FRONTEND_SPEC.md`; as rotas internas são acessadas pelos links do conteúdo ou das configurações, sem adicionar abas principais.
 
 Todo botão executa a ação real, mostra loading, mostra erro em caso de falha e reflete a resposta da API, ou fica desabilitado com o motivo visível.
 

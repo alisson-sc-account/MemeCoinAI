@@ -100,6 +100,48 @@ Deduplicação: ver DECISIONS D-009.
 
 Só x*y=k: impacto = Δx/(x+Δx), preço médio = spot × (1 − impacto). Sem taxas. Cenários padrão: US$ 100, 500, 1k, 5k, 10k, 50k. Sem posição registrada = **cenários genéricos** (registro de posição não implementado).
 
+## 9. Sinais acionáveis (`sig-1`) — `engine/signals.py`
+
+Avaliados nesta ordem (o primeiro que valer decide):
+
+| Ação | Força | Regra |
+|---|---|---|
+| AGUARDAR | — | dados não frescos (> 180 s): nunca comprar nem vender sobre cotação velha |
+| VENDER | forte | `L2_liquidity_drop_severe` ou `A4_price_crash` ou **risco observado** ≥ 75 (soma dos fatores fora da categoria `data`) |
+| VENDER | moderado | `L2_liquidity_drop`, ou `A1_sell_pressure` com variação 1 h ≤ −10% |
+| EVITAR | moderado | risco ≥ 60 ou autoridade de mint/freeze ou extensões Token-2022 de risco |
+| COMPRAR | forte | sem `insufficient_data`, liquidez ≥ 20 mil, risco < 50, oportunidade ≥ 60; rebaixado a moderado se o histórico de 1 h de casos parecidos tiver mediana ≤ 0 e P(máx ≥ +10%) < 30% |
+| COMPRAR | moderado | liquidez ≥ 10 mil, risco < 50, oportunidade ≥ 45 |
+| AGUARDAR | — | demais casos (motivos listados) |
+
+Regressões cobertas por teste: sinal de venda sobre dado de 2 h atrás; "vender" causado só por falta de verificação.
+Alertas: `buy_signal`/`sell_signal`. O alerta central da interface abre só para sinais **novos** de compra forte ou de venda.
+
+## 10. Estimativas por horizonte (`out-1`) — `engine/outcomes.py`
+
+- Rótulos: para cada análise cujo horizonte (15 min, 1 h, 6 h) **já terminou**, grava o retorno máximo, mínimo e final observado em (t, t+h]. Exige coleta sem lacunas > 5 min na janela (pelas execuções do coletor); sem snapshot novo com coleta ativa = preço inalterado. Sem cobertura → `unevaluable` (não descartado).
+- Estimativa: análises dos últimos 7 dias, com rótulo conhecido antes de `as_of`, na mesma faixa de oportunidade (<20, 20–40, 40–60, ≥60) e de risco (<50, ≥50). ≥ 30 casos → `similar`; senão todos os casos (`general`); senão `insufficient`.
+- Primeiro resultado real (2026-10-28): 135 rótulos de 15 min; mediana −0,75%, P(subir ≥ 20%) = 11,9%, P(cair ≥ 20%) = 17%. 1 h ainda sem casos válidos (lacuna de coleta).
+- Limitações: amostras correlacionadas (mesmo token em instantes próximos); preço amostrado a cada coleta; retornos brutos. Previsões de 2 min não são oferecidas: a fonte gratuita tem atraso de até ~60 s.
+
+## 11. Sugestão de posição (`advice-1`)
+
+Com posição registrada: venda forte → vender 100%; venda moderada → 50%; evitar → 50%; lucro ≥ +100% → realizar 50%; lucro ≥ +50% → 25%; compra forte sem motivo de venda → pode aumentar até 25% do valor planejado. Aviso de slippage quando a venda teria impacto > 3% (pools x*y=k). Sem posição: compra forte → entrar com 50% do valor planejado; moderada → 25%. Sempre com aviso de que não é garantia.
+
+## 12. Disparo em andamento (`burst-1`) — `engine/burst.py`
+
+**Detecção, não previsão.** Dispara quando TODAS valem na janela de 5 min: liquidez ≥ US$ 5 mil; volume dos últimos 5 min ≥ 4x o ritmo da última hora; preço +2% ou mais em 5 min; ≥ 8 transações; compras ≥ 65% das transações; alta de 1 h ≤ 300% (evita entrada tardia). Força `extreme` com 10x e +8%.
+
+Alerta `pump_burst` (categoria oportunidade, severidade alta/crítica), auto-resolvido quando a condição some — assim um disparo novo gera alerta novo. A evidência traz `pattern_stats`: o que aconteceu nos 15 min seguintes a disparos iguais já medidos (P(+10%), P(+20%), pico típico), usando só rótulos fechados antes do instante.
+
+Limitações: a fonte atualiza a cada ~30 s e atrasa até ~60 s, então parte do movimento já passou quando o alerta sai; muitos disparos se desfazem.
+
+## 13. Universo monitorado
+
+Descoberta por 4 origens gratuitas: perfis recentes, impulsionados (latest e top) e **buscas rotacionadas** (8 termos por ciclo, de uma lista de 30; 30 pares por busca). A fonte **não tem** endpoint que liste todos os tokens — o universo é o que essas origens alcançam. Teto `MAX_TRACKED_TOKENS` = 600 (20 requisições por ciclo de 30 s, ~40/min contra o limite de 300/min).
+
+`prune_inactive` deixa de monitorar tokens com mais de 3 h sem par, ou com liquidez < US$ 1,5 mil e volume 24 h < US$ 1 mil. Nunca remove tokens da watchlist nem com posição registrada; o histórico é mantido. As verificações de contrato (RPC gratuito) são priorizadas pela oportunidade recente, para que candidatos a compra sejam verificados primeiro.
+
 ## 7. Condições de invalidação gerais
 
 - Mudanças de regra exigem nova versão (`risk-2`...) e registro em DECISIONS.

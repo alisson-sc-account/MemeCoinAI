@@ -82,6 +82,15 @@ def isolated_db(tmp_path, monkeypatch):
     url = f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
     monkeypatch.setenv("DATABASE_URL", url)
     monkeypatch.setenv("SEED_INITIAL_PASSWORD", "test-initial-pw")
+    # Fixa o que o backend/.env do desenvolvedor poderia alterar, para os testes
+    # não dependerem da configuração local da máquina.
+    monkeypatch.setenv("CHAINS", "solana")
+    monkeypatch.setenv("MAX_TRACKED_TOKENS", "600")
+    monkeypatch.setenv("LIST_CACHE_SECONDS", "0")
+    monkeypatch.setenv("BOARD_ENABLED", "false")  # teste calcula na requisição; o painel tem teste próprio
+    monkeypatch.setenv("SECURITY_GATE", "false")  # só o teste da trava liga
+    monkeypatch.setenv("FRESH_MAX_AGE_SECONDS", "180")
+    monkeypatch.setenv("DELAYED_MAX_AGE_SECONDS", "900")
     config.get_settings.cache_clear()
     from alembic import command
     from alembic.config import Config
@@ -94,9 +103,32 @@ def isolated_db(tmp_path, monkeypatch):
     from app.api.auth import reset_login_limiter
 
     reset_login_limiter()
+    # Caches em memória do motor não podem vazar de um banco de teste para outro.
+    from app.engine import accuracy, burst, outcomes
+
+    accuracy.clear_cache()
+    burst.clear_cache()
+    outcomes._cache.clear()
     # Rate limiters globais não devem atrasar os testes.
     from app.sources import dexscreener, solana_rpc
 
+    from app.engine import checks
+    from app.ingest import service as svc
+    from app.sources.http import FetchResult
+
+    checks._holders_paused_until = 0.0
+
+    class _NoGecko:  # teste nunca chama rede; a descoberta pelo GeckoTerminal tem teste próprio
+        def pools(self, *_):
+            return FetchResult(ok=True, data=[])
+
+    monkeypatch.setattr(svc, "GeckoTerminalClient", _NoGecko)
+
+    class _NoJupiter:
+        def listing(self, *_):
+            return FetchResult(ok=True, data=[])
+
+    monkeypatch.setattr(svc, "JupiterTokensClient", _NoJupiter)
     for lim in (dexscreener._fast_limiter, dexscreener._slow_limiter, solana_rpc._limiter):
         monkeypatch.setattr(lim, "min_interval", 0)
     yield engine

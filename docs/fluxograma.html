@@ -1,0 +1,537 @@
+<title>Fluxograma MemeCoinAI</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+:root { color-scheme: dark; --bg: #000; --fg: #fff; --line: #8a8a8a; }
+html, body { background: var(--bg); color: var(--fg); }
+body { padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.chart { overflow: auto; background: var(--bg); }
+.chart pre { margin: 0; background: var(--bg); width: max-content; }
+.chart svg { background: var(--bg) !important; max-width: none !important; }
+.chart .node rect, .chart .node polygon, .chart .node circle, .chart .node path { fill: var(--bg) !important; stroke: var(--fg) !important; stroke-width: 1px !important; }
+.chart .cluster rect { fill: var(--bg) !important; stroke: #444 !important; stroke-width: 1px !important; }
+.chart .flowchart-link { stroke: var(--line) !important; stroke-width: 1px !important; }
+.chart marker path, .chart .marker { fill: var(--line) !important; stroke: var(--line) !important; }
+.chart .edgeLabel, .chart .edgeLabel rect, .chart .edgeLabel p, .chart .labelBkg { background: var(--bg) !important; background-color: var(--bg) !important; fill: var(--bg) !important; color: var(--fg) !important; }
+.chart .nodeLabel, .chart .cluster-label, .chart .cluster-label span, .chart .nodeLabel p, .chart text { color: var(--fg) !important; fill: var(--fg) !important; }
+</style>
+
+<div class="chart">
+<pre class="mermaid">
+%%{init: {"theme":"base","securityLevel":"loose","flowchart":{"useMaxWidth":false,"nodeSpacing":28,"rankSpacing":44,"curve":"basis"},"themeVariables":{"background":"#000000","mainBkg":"#000000","primaryColor":"#000000","primaryTextColor":"#ffffff","primaryBorderColor":"#ffffff","lineColor":"#8a8a8a","secondaryColor":"#000000","tertiaryColor":"#000000","clusterBkg":"#000000","clusterBorder":"#444444","edgeLabelBackground":"#000000","fontFamily":"Arial, sans-serif","fontSize":"14px"}}}%%
+flowchart TD
+
+subgraph S1["1. LIGAR O SISTEMA"]
+  A1["Dois cliques no start.bat"] --> A2{"Ambiente Python existe?"}
+  A2 -- não --> A3["Cria o ambiente e instala tudo"] --> A4
+  A2 -- sim --> A4{"Arquivo .env existe?"}
+  A4 -- não --> A5["Cria a partir do exemplo e pede a senha inicial"]
+  A4 -- sim --> A6["Atualiza as tabelas do banco"]
+  A6 --> A7["Garante os usuários natan e alisson"]
+  A7 --> A8{"Interface mudou?"}
+  A8 -- sim --> A9["Gera a interface de novo"] --> A10
+  A8 -- não --> A10{"Porta 8000 livre?"}
+  A10 -- não --> A11["Avisa e para"]
+  A10 -- sim --> A12["Abre os 5 programas"]
+end
+
+A12 --> P1["Site e API"]
+A12 --> P2["Coletor: orquestrador dos agentes"]
+A12 --> P3["Tempo real"]
+A12 --> P4["Segurança"]
+A12 --> P5["Painel"]
+P2 --> L1["Trava: só um coletor por banco"]
+P3 --> L2["Trava própria"]
+P4 --> L3["Trava própria"]
+P5 --> L4["Trava própria"]
+
+subgraph S2["2. ENCONTRAR MOEDAS"]
+  D1["Agente listas, a cada 60 s:<br/>perfis e impulsionados do DEX Screener"]
+  D2["Agente buscas, a cada 60 s:<br/>30 termos em rodízio, palavras e pares de letras"]
+  D3["Agente GeckoTerminal, a cada 90 s:<br/>pools novas e em alta, 2 páginas"]
+  D4["Agente Jupiter, a cada 60 s:<br/>recentes e mais negociadas"]
+  D5["Radar, a cada 20 s:<br/>mais negociadas, em alta e orgânicas em 5 min"]
+  D6{"Liquidez de US$ 3 mil ou mais?<br/>(GeckoTerminal, Jupiter e radar)"}
+  D7["Descarta"]
+  D8{"Já está na lista?"}
+  D9{"Cabe no limite de 20 mil?"}
+  D10["Adiciona a moeda e guarda a origem"]
+  D11["Promove a quente por 15 min"]
+  D12["Agente limpeza, a cada 5 min:<br/>3 h ou mais, liquidez abaixo de US$ 1.500<br/>e volume abaixo de US$ 1.000 sai da lista"]
+  D13["Moeda com posição ou adicionada à mão nunca sai"]
+  D3 --> D6
+  D4 --> D6
+  D5 --> D6
+  D6 -- não --> D7
+  D6 -- sim --> D8
+  D1 --> D8
+  D2 --> D8
+  D8 -- sim, veio do radar --> D11
+  D8 -- não --> D9
+  D9 -- não --> D7
+  D9 -- sim --> D10
+  D10 --> D12
+  D12 --> D13
+end
+P2 --> D1
+P2 --> D2
+P2 --> D3
+P2 --> D4
+P2 --> D5
+
+subgraph S3["3. COLETAR O MERCADO"]
+  C1{"Moeda é urgente?<br/>posição, sinal de compra ou venda, radar"}
+  C2{"É novata?<br/>até 300 por ciclo"}
+  C3{"Está entre as mais quentes?<br/>maior volume em 1 h, até 1500 no total"}
+  C4["Agente quentes, a cada 30 s:<br/>50 pedidos, 30 moedas por pedido"]
+  C5["Agente frias, a cada 30 s:<br/>70 pedidos, as conferidas há mais tempo"]
+  C6["Limitador do DEX Screener:<br/>280 pedidos por minuto no máximo"]
+  C7{"Fonte respondeu?"}
+  C8["Registra erro; 3 falhas seguidas abre alerta de fonte fora do ar"]
+  C9["Padroniza os dados do par"]
+  C10["Guarda a pool de maior liquidez como principal"]
+  C11["Anota última conferência e volume da moeda"]
+  C12{"Dados iguais aos anteriores?"}
+  C13["Não grava cópia, mas conta como conferida"]
+  C14["Grava a foto do mercado"]
+  C1 -- sim --> C4
+  C1 -- não --> C2
+  C2 -- sim --> C4
+  C2 -- não --> C3
+  C3 -- sim --> C4
+  C3 -- não --> C5
+  C4 --> C6
+  C5 --> C6
+  C6 --> C7
+  C7 -- não --> C8
+  C7 -- sim --> C9 --> C10 --> C11 --> C12
+  C12 -- sim --> C13
+  C12 -- não --> C14
+end
+D10 --> C1
+D11 --> C1
+
+subgraph S4["4. FILA DE ANÁLISE"]
+  Q1["Agente análise pega 40 moedas por vez"]
+  Q2["Quentes passam na frente das frias"]
+  Q3["A mesma moeda não entra duas vezes"]
+  Q1 --> Q2 --> Q3
+end
+C14 --> Q1
+
+subgraph S5["5. VERIFICAR O CONTRATO"]
+  K1["Agente contrato, a cada 30 s:<br/>15 moedas, as de maior oportunidade primeiro"]
+  K2["Lê mint, freeze e extensões Token-2022"]
+  K3{"Maiores contas responderam?"}
+  K4["Pausa esse pedido por 10 min"]
+  K5["Guarda a verificação e devolve a moeda à fila"]
+  K1 --> K2 --> K3
+  K3 -- não --> K4 --> K5
+  K3 -- sim --> K5
+end
+P2 --> K1
+K5 --> Q1
+
+subgraph S6["6. CALCULAR A MOEDA"]
+  F1["Junta as fotos das últimas 2 horas"]
+  F2["Calcula medidas: aceleração de volume, liquidez x valor,<br/>compras x vendas, queda de liquidez, idade do par"]
+  R1["Pontua risco: liquidez baixa, queda de liquidez,<br/>pressão de venda, poucos negócios grandes,<br/>volume x liquidez, queda de preço, dados faltando,<br/>mint, freeze, Token-2022, concentração"]
+  R2["Pontua oportunidade, 0 a 100"]
+  F1 --> F2 --> R1 --> R2
+end
+Q3 --> F1
+
+subgraph S7["7. DECIDIR"]
+  G1{"Preço caiu 70% e liquidez 60% em 1 h?"}
+  G2["Marca de golpe para sempre: risco 100"]
+  G3{"Já tem marca de golpe?"}
+  B1{"Disparo agora?<br/>liquidez US$ 5 mil, volume 4x, preço +2% em 5 min,<br/>8 operações, 65% de compras, alta em 1 h até 300%"}
+  B2{"Volume 10x e preço +8%?"}
+  B3["Disparo extremo: alerta crítico"]
+  B4["Disparo forte: alerta alto"]
+  B5["Junta o histórico de disparos parecidos"]
+  E1["Estima o que aconteceu com moedas parecidas:<br/>15 min, 1 h e 6 h, com ao menos 30 casos"]
+  H1{"Dado com menos de 3 min?"}
+  H2["Aguardar: sem sinal"]
+  H3{"Liquidez caiu 60%, preço caiu 40%<br/>ou risco observado 75 ou mais?"}
+  H4["Vender forte"]
+  H5{"Liquidez caiu 30%<br/>ou pressão de venda com queda de 10%?"}
+  H6["Vender moderado"]
+  H7{"Mint, freeze, Token-2022 ou risco 60 ou mais?"}
+  H8["Evitar"]
+  H9{"Oportunidade 45 ou mais?<br/>se já era compra, 40 basta"}
+  H10["Aguardar"]
+  H11{"Oportunidade 60 ou mais<br/>e liquidez US$ 20 mil?"}
+  H12["Comprar forte"]
+  H13["Comprar moderado"]
+  G1 -- sim --> G2
+  G1 -- não --> G3
+  G2 --> B5x["Disparo não dispara"]
+  G3 -- sim --> B5x
+  G3 -- não --> B1
+  B1 -- sim --> B2
+  B2 -- sim --> B3 --> B5
+  B2 -- não --> B4 --> B5
+  B1 -- não --> E1
+  B5 --> E1
+  B5x --> E1
+  E1 --> H1
+  H1 -- não --> H2
+  H1 -- sim --> H3
+  H3 -- sim --> H4
+  H3 -- não --> H5
+  H5 -- sim --> H6
+  H5 -- não --> H7
+  H7 -- sim --> H8
+  H7 -- não --> H9
+  H9 -- não --> H10
+  H9 -- sim --> H11
+  H11 -- sim --> H12
+  H11 -- não --> H13
+end
+R2 --> G1
+
+subgraph S8["8. SEGURANÇA DA MOEDA"]
+  Z1{"Qual a próxima?"}
+  Z2["1º moeda aberta, a cada 2 min"]
+  Z3["2º sinal de compra ou posição, a cada 5 min"]
+  Z4["3º mais quentes, a cada 6 h"]
+  Z5["RugCheck: 1 moeda a cada ~5 s"]
+  Z6["Tira a pool e os travadores da lista de donos"]
+  Z7["Autoridades: mint e freeze"]
+  Z8["Liquidez travada: abaixo de 50% é perigo"]
+  Z9["Maior dono: 20% é perigo, 10% atenção"]
+  Z10["10 maiores: 50% é perigo, 30% atenção"]
+  Z11["Rede de insiders: 20% é perigo, 10% atenção"]
+  W1["Triagem das 10 maiores carteiras no publicnode, ~63 h"]
+  W2{"Quantas transações?"}
+  W3["Nenhuma: não é nova"]
+  W4["100 ou mais: idade desconhecida"]
+  W5["Poucas: confirma no RPC oficial, 1 a cada 15 s"]
+  W6{"Confirmou?"}
+  W7["Idade desconhecida; tenta de novo em 10 min"]
+  W8["Guarda idade e quem enviou o primeiro dinheiro"]
+  W9["Carteiras novas: 30% é perigo, 15% atenção"]
+  W10["Mesma origem: 30% é perigo, 10% atenção"]
+  Y1["Atividade: operações abaixo de US$ 15<br/>e quantidade por hora quase igual"]
+  Y2["Liquidez abaixo de 2% do valor,<br/>moeda com menos de 7 dias e US$ 1 mi ou mais: perigo"]
+  Y3["Nome que imita algo oficial ou stablecoin: atenção"]
+  Y4{"Veredito"}
+  Y5["Perigo"]
+  Y6["Atenção"]
+  Y7["Sem alertas"]
+  Y8["Sem dados"]
+  Z1 --> Z2 --> Z5
+  Z1 --> Z3 --> Z5
+  Z1 --> Z4 --> Z5
+  Z5 --> Z6 --> Z7 --> Z8 --> Z9 --> Z10 --> Z11 --> W1 --> W2
+  W2 --> W3 --> W9
+  W2 --> W4 --> W9
+  W2 --> W5 --> W6
+  W6 -- não --> W7 --> W9
+  W6 -- sim --> W8 --> W9
+  W9 --> W10 --> Y1 --> Y2 --> Y3 --> Y4
+  Y4 --> Y5
+  Y4 --> Y6
+  Y4 --> Y7
+  Y4 --> Y8
+end
+P4 --> Z1
+
+subgraph S9["9. TRAVA DA COMPRA"]
+  T1{"Veredito de segurança"}
+  T2["Perigo: vira Evitar"]
+  T3["Atenção ou sem dados: no máximo moderado"]
+  T4["Sem alertas: mantém"]
+  T5{"Mudou de sinal?"}
+  T6["Encerra o anterior e grava o novo com o preço e a hora"]
+  T7["Só confirma o sinal atual"]
+  T1 --> T2
+  T1 --> T3
+  T1 --> T4
+  T2 --> T5
+  T3 --> T5
+  T4 --> T5
+  T5 -- sim --> T6
+  T5 -- não --> T7
+end
+H12 --> T1
+H13 --> T1
+H4 --> T5
+H6 --> T5
+H8 --> T5
+H2 --> T5
+H10 --> T5
+Y5 --> T1
+Y6 --> T1
+Y7 --> T1
+Y8 --> T1
+
+subgraph S10["10. ALERTAS E PREVISÕES"]
+  N1["Abre ou atualiza alerta sem repetir"]
+  N2["Fecha alerta cuja condição acabou"]
+  N3{"Liquidez US$ 5 mil ou mais?"}
+  N4["Cria previsões com prazo"]
+  N1 --> N2 --> N3
+  N3 -- sim --> N4
+end
+T6 --> N1
+T7 --> N1
+B3 --> N1
+B4 --> N1
+
+subgraph S11["11. MEDIR O RESULTADO"]
+  M1["Agente avaliação, a cada 2 min"]
+  M2{"Prazo terminou?"}
+  M3["Espera: pendente"]
+  M4{"Houve coleta contínua no período?"}
+  M5["Inavaliável: não conta"]
+  M6["Compara o preço: 15 min, 1 h e 6 h"]
+  M7["Guarda maior alta, maior queda e preço final"]
+  M8["Alimenta as estimativas e a aba Acertos"]
+  M1 --> M2
+  M2 -- não --> M3
+  M2 -- sim --> M4
+  M4 -- não --> M5
+  M4 -- sim --> M6 --> M7 --> M8
+end
+N4 --> M1
+T6 --> M1
+M8 --> E1
+
+subgraph S12["12. MANUTENÇÃO"]
+  X1["Agente limpeza de dados, a cada 1 h"]
+  X2["Dados brutos com mais de 1 dia somem"]
+  X3["Fotos com mais de 15 dias somem, exceto moedas com posição"]
+  X4["Cotações rápidas com mais de 24 h somem"]
+  X1 --> X2 --> X3 --> X4
+end
+P2 --> X1
+
+subgraph S13["13. PAINEL"]
+  V1["Lê todas as moedas, análises e sinais"]
+  V2["Classifica: prioritária, possível, observar, evitar"]
+  V3{"Variação acima de +100.000%?"}
+  V4["Dado suspeito: bloqueia"]
+  V5["Grava listas prontas em arquivo separado"]
+  V6["Troca o arquivo de uma vez e repete em 5 s"]
+  V1 --> V2 --> V3
+  V3 -- sim --> V4 --> V5
+  V3 -- não --> V5
+  V5 --> V6
+end
+P5 --> V1
+T6 --> V1
+
+subgraph S14["14. ENTRAR NO SITE"]
+  U1["Abre 127.0.0.1:8000"]
+  U2{"Tem sessão válida?"}
+  U3["Tela de login"]
+  U4{"Senha certa?"}
+  U5{"Muitas tentativas?"}
+  U6["Bloqueia por um tempo"]
+  U7["Cria sessão de 72 h"]
+  U8{"Ainda é a senha inicial?"}
+  U9["Avisa para trocar"]
+  U10["Menu: Dashboard, Compre agora, Alertas,<br/>Acertos, Favoritados, Configurações"]
+  U1 --> U2
+  U2 -- não --> U3 --> U4
+  U4 -- não --> U5
+  U5 -- sim --> U6
+  U5 -- não --> U3
+  U4 -- sim --> U7 --> U8
+  U2 -- sim --> U8
+  U8 -- sim --> U9 --> U10
+  U8 -- não --> U10
+end
+P1 --> U1
+
+subgraph S15["15. ALERTA NO MEIO DA TELA"]
+  AL1["Em qualquer tela, confere a cada 30 s"]
+  AL2{"Sinal ou disparo novo?"}
+  AL3{"Tipo ligado em Configurações?<br/>padrão: compra forte e disparo"}
+  AL4["Não aparece"]
+  AL5["Abre no meio da tela"]
+  AL6{"Som ligado?"}
+  AL7["Toca o som do tipo"]
+  AL8{"Aba escondida e notificação permitida?"}
+  AL9["Avisa fora da aba"]
+  AL10{"O que você faz?"}
+  AL11["ESC, Fechar ou clique fora: fecha"]
+  AL12["Ver token: abre a moeda"]
+  AL1 --> AL2
+  AL2 -- sim --> AL3
+  AL3 -- não --> AL4
+  AL3 -- sim --> AL5 --> AL6
+  AL6 -- sim --> AL7 --> AL8
+  AL6 -- não --> AL8
+  AL8 -- sim --> AL9 --> AL10
+  AL8 -- não --> AL10
+  AL10 --> AL11
+  AL10 --> AL12
+end
+U10 --> AL1
+N1 --> AL1
+
+subgraph S16["16. TELAS"]
+  TA["Dashboard: números, comprar agora, maiores riscos,<br/>alertas recentes, previsões, fontes e coletor"]
+  TB["Compre agora: filtros de nível, ordem, liquidez mínima;<br/>card com preço, 1 h, 24 h, score, risco, segurança, hora do sinal"]
+  TC["Alertas: filtros, reconhecer e resolver"]
+  TD1["Acertos: 15 min, 1 h, 6 h; por nível; acertos, erros, pendentes"]
+  TE["Favoritados: ganho congelado no clique, resumo"]
+  TF["Configurações: fontes, saldo, alertas, som, senha, sair"]
+  TG["Saúde: agentes por categoria, fontes e execuções"]
+  TH["Todos os tokens: busca, filtros, adicionar à mão, parar de monitorar"]
+  TI["Previsões: pendentes, avaliadas, desempenho"]
+end
+U10 --> TA
+U10 --> TB
+U10 --> TC
+U10 --> TD1
+U10 --> TE
+U10 --> TF
+TA --> TG
+TA --> TH
+TA --> TI
+V6 --> TA
+V6 --> TB
+V6 --> TH
+M8 --> TD1
+N1 --> TC
+AL12 --> O1
+TB --> O1
+TH --> O1
+
+subgraph S17["17. MOEDA ABERTA"]
+  O1["Abre a moeda"]
+  O2["A cada 1 s pede o plano de venda e avisa: esta moeda está aberta"]
+  O3["Mercado: preço, 1 h, 24 h, liquidez, volume, capitalização"]
+  O4["Quadro de segurança e mapa de bolhas"]
+  O5["Sinal atual, motivos e estimativas"]
+  O6["Gráfico de velas: 1 h, 6 h, 24 h, 7 dias, com seta de COMPRA"]
+  O7["Minha posição: quantidade e preço de compra"]
+  O8["Detalhes técnicos recolhidos"]
+  O9["Estrela de favorito"]
+  O1 --> O2
+  O1 --> O3
+  O1 --> O4
+  O1 --> O5
+  O1 --> O6
+  O1 --> O7
+  O1 --> O8
+  O1 --> O9
+end
+Y4 --> O4
+T6 --> O5
+
+subgraph S18["18. PREÇO AO VIVO"]
+  LV1["Moeda aberta há até 5 s: até 10 moedas"]
+  LV2{"Pool suportada?<br/>pump.fun, PumpSwap, Raydium CPMM ou AMM v4"}
+  LV3["Lê as reservas na blockchain, a cada ~1 s"]
+  LV4{"Pool vazia ou migrou?"}
+  LV5["Recusa e procura a pool de novo"]
+  LV6["Calibra pela cotação mais recente e calcula o preço"]
+  LV7["Jupiter a cada 10 s:<br/>abertas nos últimos 60 s e com posição"]
+  LV8["Guarda a cotação rápida"]
+  LV9{"RPC negou?"}
+  LV10["Espera 3 s"]
+  LV11{"Tem cotação recente?"}
+  LV12["AO VIVO"]
+  LV13["Usa o preço do coletor e avisa"]
+  LV1 --> LV2
+  LV2 -- sim --> LV3 --> LV9
+  LV9 -- sim --> LV10 --> LV3
+  LV9 -- não --> LV4
+  LV4 -- sim --> LV5 --> LV2
+  LV4 -- não --> LV6 --> LV8
+  LV2 -- não --> LV7 --> LV8
+  LV8 --> LV11
+  LV11 -- sim --> LV12
+  LV11 -- não --> LV13
+end
+P3 --> LV1
+O2 --> LV1
+
+subgraph S19["19. QUANDO VENDER"]
+  SV1["Referência: seu preço de compra, senão o do sinal, senão o atual"]
+  SV2{"Golpe, liquidez retirada ou preço despencando?<br/>liquidez até 40% do topo de 15 min; preço até 60% do topo de 5 min"}
+  SV3{"Caiu 15% do topo de 15 min?"}
+  SV4{"Caiu 8% do topo?"}
+  SV5{"Abaixo de -15% da referência?"}
+  SV6{"Sinal de vender?"}
+  SV7["VENDA TUDO AGORA"]
+  SV8["VENDA 50% AGORA"]
+  SV9["SEGURE"]
+  SV10["Mostra Atualizado há N s"]
+  SV11["Plano: +20% vende 30%, +50% vende 30%, +100% vende 40%"]
+  SV1 --> SV2
+  SV2 -- sim --> SV7
+  SV2 -- não --> SV3
+  SV3 -- sim --> SV7
+  SV3 -- não --> SV4
+  SV4 -- sim --> SV8
+  SV4 -- não --> SV5
+  SV5 -- sim --> SV7
+  SV5 -- não --> SV6
+  SV6 -- forte --> SV7
+  SV6 -- moderado ou evitar --> SV8
+  SV6 -- não --> SV9
+  SV7 --> SV10
+  SV8 --> SV10
+  SV9 --> SV10
+  SV10 --> SV11
+end
+LV12 --> SV1
+LV13 --> SV1
+
+subgraph S20["20. SIMULAÇÃO"]
+  SI1{"Moeda já teve sinal de compra?"}
+  SI2["Espera: começa sozinha quando apitar"]
+  SI3["Pega preço e hora do último sinal de compra"]
+  SI4["Calcula 1.000 moedas e US$ 1.000 até o preço de agora"]
+  SI5["Mostra ganho em %, pagou e vale agora"]
+  SI1 -- não --> SI2
+  SI1 -- sim --> SI3 --> SI4 --> SI5
+end
+O6 --> SI1
+LV12 --> SI4
+
+subgraph S21["21. POSIÇÃO E SALDO"]
+  PS1["Você informa quantidade e preço"]
+  PS2["Moeda fica sempre em tempo real e nunca sai da lista"]
+  PS3["Calcula resultado e impacto de vender"]
+  PS4["Saldo em Configurações"]
+  PS5["Sugere quanto do saldo usar, até o teto"]
+  PS1 --> PS2 --> PS3
+  PS4 --> PS5
+end
+O7 --> PS1
+TF --> PS4
+PS5 --> TB
+PS1 --> SV1
+
+subgraph S22["22. FAVORITOS"]
+  FV1["Clica na estrela"]
+  FV2{"Já favoritou esta previsão?"}
+  FV3["Devolve o registro original"]
+  FV4["Congela preço, ganho, melhor e pior momento,<br/>scores, mercado, segurança e regras"]
+  FV5["Aparece na aba Favoritados"]
+  FV6["Botão: Copiar resultados e especificações"]
+  FV7{"Navegador permitiu copiar?"}
+  FV8["Copiado"]
+  FV9["Mostra o texto para copiar à mão"]
+  FV10["Você cola na conversa"]
+  FV11["Regra só muda se provar em dados que não viu"]
+  FV1 --> FV2
+  FV2 -- sim --> FV3
+  FV2 -- não --> FV4 --> FV5 --> FV6 --> FV7
+  FV7 -- sim --> FV8 --> FV10
+  FV7 -- não --> FV9 --> FV10
+  FV10 --> FV11
+end
+O9 --> FV1
+TB --> FV1
+TD1 --> FV1
+TE --> FV6
+FV11 --> H9
+</pre>
+</div>

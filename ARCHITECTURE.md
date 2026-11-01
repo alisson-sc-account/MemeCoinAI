@@ -1,6 +1,6 @@
 # Arquitetura — MemeCoinAI
 
-Estado: **MVP de backend implementado e validado com testes e com dados reais (2026-10-28)**. Frontend ainda não iniciado (responsabilidade do Codex, ver `CODEX_FRONTEND_TASK.md`).
+Estado (2026-10-29): **backend, motor e interface implementados e testados** (98 testes backend, 24 frontend), verificados com dados reais. Interface com exatamente quatro abas: Dashboard, Compre agora, Alertas e Configurações. Rastreabilidade bloco a bloco em [`docs/TRACEABILITY.md`](docs/TRACEABILITY.md); fontes e custo em [`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md).
 
 ## Visão geral
 
@@ -40,7 +40,10 @@ API e worker são **processos separados** que compartilham apenas o banco. Se um
 | Logs | `logging_setup.py` | nunca registra senhas/tokens |
 | Inteligência de carteiras | — | **não iniciado** (Fase 7; depende de RPC/indexador com cota) |
 | Dados sociais | — | somente links declarados na fonte; **sem métricas sociais** |
-| Interface web | `frontend/` | **não iniciado** (Codex); build servido por `main.py::_mount_frontend` (implementado e testado) |
+| Interface web | `frontend/` | **testado**: 4 abas; build servido por `main.py::_mount_frontend` |
+| Níveis de oportunidade | `engine/ranking.py`, `api/opportunities.py` | `rank-1`: vetos, qualidade da decisão, score/confiança/cobertura separados |
+| Registro de fontes | `sources/registry.py` | 36 fontes do fluxograma com classe A/B/C/D; só A ligadas |
+| Instância única do worker | `worker_lock.py` | trava de arquivo do SO em `backend/data/worker.lock` |
 
 ## Fluxo de dados
 
@@ -86,6 +89,17 @@ Verificado com requisições reais em 2026-10-28. Termos de uso do DEX Screener 
 - Provedor ainda não escolhido (T-020). As condições dos níveis gratuitos devem ser conferidas no momento da escolha.
 - Um único worker por banco (não há lock distribuído). Reinício é seguro: o estado está no banco.
 - O computador pessoal **não** precisa ficar ligado depois do deploy; até lá, a coleta só ocorre enquanto `python -m app.worker` estiver rodando localmente.
+
+## Subsistemas dedicados (D-016)
+
+Funções que precisam de ritmo próprio ganham um subsistema isolado: pacote, processo, trava, fonte e tabelas próprios, e um batimento em `service_heartbeats` que o `/health` lê.
+
+| Subsistema | Processo | Função | Ritmo |
+|---|---|---|---|
+| Coletor geral | `python -m app.worker` | descoberta, 600 tokens, análise, sinais | 30 s (volta completa ~60 s) |
+| Atualização rápida (`app/live`) | `python -m app.live` | preço do quadro "Quando vender" + golpe ao vivo | 10 s |
+
+A API só lê o que os subsistemas gravam. Se um deles parar, a API volta ao dado do coletor e diz isso na resposta.
 
 ## Configuração
 

@@ -4,14 +4,15 @@ Somente Solana (SPL Token / Token-2022) é suportada nesta versão. Para outras
 redes o resultado é `not_applicable` e o motor registra que a verificação
 não foi feita (falta de evidência NÃO é tratada como segurança).
 """
+import time
 from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import utcnow
 from app.ingest.service import collector_run, record_fetch
-from app.models import RiskCheck, Token
+from app.models import Analysis, RiskCheck, Token
 from app.sources import solana_rpc
 from app.sources.solana_rpc import SolanaRpcClient
 
@@ -35,6 +36,10 @@ RISKY_EXTENSIONS = {
 
 RECHECK_INTERVAL = timedelta(hours=1)
 RATE_LIMITED_RETRY = timedelta(minutes=15)
+
+
+HOLDERS_PAUSE_SECONDS = 600.0  # getTokenLargestAccounts vive em 429 no RPC público
+_holders_paused_until = 0.0
 
 
 def parse_mint_account(value: dict | None) -> tuple[str, dict]:
@@ -119,6 +124,7 @@ def latest_check(db: Session, token_id: int, check_type: str) -> RiskCheck | Non
 
 
 def run_solana_checks(db: Session, token: Token, rpc: SolanaRpcClient | None = None) -> list[RiskCheck]:
+    global _holders_paused_until
     rpc = rpc or SolanaRpcClient()
     created: list[RiskCheck] = []
     rate_limited = False
@@ -138,9 +144,11 @@ def run_solana_checks(db: Session, token: Token, rpc: SolanaRpcClient | None = N
         db.add(mint_check)
         created.append(mint_check)
 
-        if status in ("ok", "flagged"):
+        if status in ("ok", "flagged") and time.monotonic() >= _holders_paused_until:
             res2 = rpc.get_token_largest_accounts(token.address)
             record_fetch(run, res2)
+            if res2.rate_limited:  # método em 429: para de gastar a fila com ele por um tempo
+                _holders_paused_until = time.monotonic() + HOLDERS_PAUSE_SECONDS
             if res2.ok:
                 run.items_received += 1
                 h_status, h_result = parse_largest_accounts(
@@ -162,16 +170,28 @@ def run_solana_checks(db: Session, token: Token, rpc: SolanaRpcClient | None = N
 
 
 def run_due_checks(db: Session, limit: int = 3, rpc: SolanaRpcClient | None = None) -> list[int]:
-    """Executa verificações dos tokens cujo prazo venceu. Retorna ids verificados."""
+    """Executa verificações dos tokens cujo prazo venceu. Retorna ids verificados.
+
+    Com centenas de tokens monitorados o RPC gratuito não cobre todos: a fila é
+    ordenada pela oportunidade recente, para que candidatos a compra tenham o
+    contrato verificado antes dos demais.
+    """
     now = utcnow()
+    recent = (
+        select(Analysis.token_id.label("token_id"), func.max(Analysis.opportunity_score).label("opp"))
+        .where(Analysis.computed_at >= now - timedelta(minutes=15))
+        .group_by(Analysis.token_id)
+        .subquery()
+    )
     tokens = db.scalars(
         select(Token)
+        .outerjoin(recent, recent.c.token_id == Token.id)
         .where(
             Token.is_tracked.is_(True),
             Token.chain_id == "solana",
             (Token.next_risk_check_at.is_(None)) | (Token.next_risk_check_at <= now),
         )
-        .order_by(Token.next_risk_check_at.is_not(None), Token.next_risk_check_at)
+        .order_by(func.coalesce(recent.c.opp, 0).desc(), Token.next_risk_check_at.is_not(None), Token.next_risk_check_at)
         .limit(limit)
     ).all()
     for t in tokens:

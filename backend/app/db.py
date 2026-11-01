@@ -57,6 +57,11 @@ def make_engine(url: str) -> Engine:
             cur = dbapi_conn.cursor()
             cur.execute("PRAGMA foreign_keys=ON")
             cur.execute("PRAGMA journal_mode=WAL")
+            # Com WAL, NORMAL não corrompe o banco e evita um fsync por commit (uma análise = um commit).
+            cur.execute("PRAGMA synchronous=NORMAL")
+            cur.execute("PRAGMA cache_size=-64000")
+            cur.execute("PRAGMA temp_store=MEMORY")
+            cur.execute("PRAGMA mmap_size=268435456")
             cur.close()
 
     return engine

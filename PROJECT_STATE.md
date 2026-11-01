@@ -24,7 +24,10 @@ Sistema web de inteligência para memecoins baseado em dados reais verificáveis
 | Slippage (x*y=k) | **validado com testes** (fórmula); não comparado com execuções reais |
 | Previsões + avaliação + métricas | **validado com testes**; modelo **não calibrado**; nenhuma previsão real avaliada ainda (horizonte 6 h) |
 | Worker contínuo | **implementado, não verificado em execução prolongada** (jobs testados individualmente via CLI) |
-| Frontend | **não iniciado** — especificação pronta para o Codex |
+| Frontend (Codex) | **implementado e integrado**; testes unitários/componentes + verificação manual no navegador (desktop e 390 px). E2E não executado. Ainda não commitado |
+| Execução local | `run-local.ps1` (um comando: API + interface em :8000 + coletor) |
+| Sinais de compra/venda + estimativas 15 min/1 h/6 h + posição/sugestão + alerta central | **validado com testes** e verificado no navegador; limiares **não calibrados** historicamente (T-026) |
+| Atualização | coletor e interface a cada 30 s |
 | Inteligência de carteiras | não iniciado |
 | Dados sociais | apenas links declarados pela fonte |
 | Deploy/hospedagem | não iniciado; alvo: VM do nível gratuito (falta o proprietário criar a conta) |

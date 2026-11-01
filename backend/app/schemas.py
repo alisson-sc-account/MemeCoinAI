@@ -68,11 +68,64 @@ class LoginResponse(Out):
 
 
 # ---------------- Sistema ----------------
+class WorkerStatusOut(Out):
+    """Derivado da última coleta concluída (o worker não expõe porta própria)."""
+
+    status: Literal["running", "stopped", "unknown"]
+    last_cycle_at: UTCdt | None
+    age_seconds: float | None
+    expected_interval_seconds: int
+    last_cycle_duration_seconds: float | None = None
+
+
+class LiveServiceOut(Out):
+    status: Literal["running", "stopped", "unknown"]
+    last_tick_at: UTCdt | None
+    age_seconds: float | None
+    interval_seconds: int
+    watched: int
+    quoted: int
+    last_error: str | None
+    source: str
+
+
+class AgentStatusOut(Out):
+    name: str
+    category: str
+    label: str
+    source: str
+    process: str
+    status: Literal["running", "stopped", "unknown"]
+    last_tick_at: UTCdt | None
+    age_seconds: float | None
+    interval_seconds: int | None
+    items: int
+    last_duration_ms: float | None
+    last_error: str | None
+
+
 class HealthOut(Out):
     status: Literal["ok", "degraded"]
     database: Literal["ok", "error"]
     version: str
     time: UTCdt
+    worker: WorkerStatusOut
+    live: LiveServiceOut | None = None
+
+
+class SourceRegistryOut(Out):
+    key: str
+    name: str
+    role: str
+    access_class: Literal["A", "B", "C", "D"]
+    access_label: str
+    enabled: bool
+    integration: str
+    needs_key: bool | None
+    verified_on: str | None
+    verification: str
+    limits: str
+    fallback: str
 
 
 class SourceStatusOut(Out):
@@ -295,7 +348,161 @@ class ExitEstimateOut(Out):
     )
 
 
+class HorizonEstimateOut(Out):
+    """Distribuição empírica de retornos de análises passadas semelhantes.
+
+    basis: `similar` (mesma faixa de oportunidade/risco), `general` (todas as
+    amostras) ou `insufficient` (menos de `needed` amostras; campos numéricos nulos).
+    Retornos são frações (0.12 = +12%) e brutos (sem taxas/slippage).
+    """
+
+    horizon: Literal["15m", "1h", "6h"]
+    horizon_seconds: int
+    basis: Literal["similar", "general", "insufficient"]
+    n: int
+    needed: int | None = None
+    end_p25: float | None = None
+    end_median: float | None = None
+    end_p75: float | None = None
+    max_median: float | None = None
+    p_up_10: float | None = None
+    p_up_20: float | None = None
+    p_up_50: float | None = None
+    p_down_20: float | None = None
+    p_end_positive: float | None = None
+    method_version: str
+
+
+SignalAction = Literal["buy", "sell", "avoid", "hold"]
+
+
+class AllocationOut(Out):
+    """Quanto do saldo do usuário usar numa compra (regra `size-1`)."""
+
+    percent_of_balance: float
+    amount: float
+    currency: Literal["BRL", "USD"]
+    max_trade_percent: float
+    rule: str
+
+
+class AccountSettings(BaseModel):
+    balance_amount: float | None = Field(None, ge=0, le=1e12, description="Saldo para simulação; null = não informado")
+    balance_currency: Literal["BRL", "USD"] = "BRL"
+    max_trade_percent: float = Field(10.0, gt=0, le=100, description="Teto por operação, em % do saldo")
+
+
+class SignalOut(Out):
+    id: int
+    allocation: AllocationOut | None = None
+    token: TokenRef
+    action: SignalAction
+    strength: Literal["strong", "moderate", "none"]
+    status: Literal["active", "superseded"]
+    headline: str
+    reasons: list[str]
+    risk_score: float
+    risk_level: RiskLevel
+    opportunity_score: float
+    reference_price_usd: float | None
+    estimates: list[HorizonEstimateOut]
+    created_at: UTCdt
+    last_confirmed_at: UTCdt
+    rules_version: str
+    link: str
+
+
+class SignalPerformanceOut(Out):
+    action: Literal["buy", "sell"]
+    strength: str
+    horizon: str
+    n: int
+    hit_rate: float
+    big_move_rate: float
+    median_end_return: float
+    definition: str
+
+
+class PositionIn(BaseModel):
+    quantity: float = Field(gt=0, description="Quantidade de tokens")
+    entry_price_usd: float | None = Field(None, gt=0)
+
+
+class PositionOut(Out):
+    token: TokenRef
+    quantity: float
+    entry_price_usd: float | None
+    current_price_usd: float | None
+    value_usd: float | None
+    pnl: float | None
+    updated_at: UTCdt
+    link: str
+
+
+class AdviceOut(Out):
+    version: str
+    has_position: bool
+    action: Literal["buy", "sell", "hold", "none"]
+    summary: str
+    reasons: list[str]
+    sell_percent: int | None = None
+    keep_percent: int | None = None
+    buy_percent_of_plan: int | None = None
+    buy_percent_of_balance: float | None = None
+    buy_amount: float | None = None
+    currency: Literal["BRL", "USD"] | None = None
+    position_value_usd: float | None = None
+    pnl: float | None = None
+    slippage_note: str | None = None
+    disclaimer: str
+
+
+class BuySimulationOut(Out):
+    """Último sinal de compra da moeda: início automático da simulação no gráfico."""
+
+    signal_id: int
+    signal_at: UTCdt
+    entry_price_usd: float
+    strength: str
+
+
+class SecurityCheckOut(Out):
+    key: str
+    label: str
+    status: Literal["ok", "warn", "danger", "unknown"]
+    detail: str
+
+
+class SecurityHolderOut(Out):
+    owner: str
+    pct: float
+    insider: bool = False
+    fresh: bool | None = None
+    age_hours: float | None = None
+    funder: str | None = None
+    cluster: int | None = None
+
+
+class SecurityOut(Out):
+    verdict: Literal["danger", "caution", "clear", "unknown"]
+    label: str
+    checked_at: UTCdt | None
+    rugged_at: UTCdt | None
+    rug_reason: str | None
+    checks: list[SecurityCheckOut]
+    holders: list[SecurityHolderOut]
+    total_holders: int | None
+    service_running: bool
+    limitations: list[str]
+    rules_version: str
+
+
 class TokenDetail(TokenListItem):
+    buy_simulation: BuySimulationOut | None = None
+    signal: SignalOut | None
+    estimates: list[HorizonEstimateOut]
+    position: PositionOut | None
+    advice: AdviceOut
     links: list[dict] | None
     pairs: list[PairOut]
     analysis: AnalysisOut | None
@@ -391,3 +598,207 @@ class MetaOut(Out):
     prediction_targets: dict[str, str]
     engine_version: str
     freshness_thresholds_seconds: dict[str, int]
+
+
+class OpportunityOut(Out):
+    token: TokenRef
+    link: str
+    tier: Literal["priority_buy", "possible_buy", "watch", "avoid"]
+    tier_label: str
+    decision_quality: Literal["ok", "partial", "no_reliable_signal"]
+    decision_quality_reason: str
+    score: float | None
+    score_previous: float | None
+    score_change: float | None
+    confidence: float | None
+    coverage: float | None
+    risk_score: float | None
+    risk_level: RiskLevel | None
+    critical_blocks: list[str]
+    reasons_for: list[str]
+    reasons_against: list[str]
+    missing_data: list[str]
+    price_usd: float | None
+    price_change_h1: float | None
+    price_change_h24: float | None
+    liquidity_usd: float | None
+    volume_h24: float | None
+    pair_age_hours: float | None
+    dex_id: str | None
+    freshness: Freshness
+    signal_headline: str | None
+    signal_since: UTCdt | None
+    security_verdict: str = "unknown"
+    signal_id: int | None = None
+    allocation: AllocationOut | None
+    computed_at: UTCdt | None
+    ranking_version: str
+
+
+class OpportunityPage(Out):
+    items: list[OpportunityOut]
+    total: int
+    page: int
+    page_size: int
+    counts: dict[str, int]
+    generated_at: UTCdt
+    ranking_version: str
+    disclaimer: str = ("Classificação informativa gerada por regras sobre dados públicos. "
+                       "Não é garantia de resultado nem recomendação financeira; o sistema não executa ordens.")
+
+
+# ---------------- Acertos (acc-1) ----------------
+class AccuracyCounts(Out):
+    hits: int
+    misses: int
+    evaluated: int
+    pending: int
+    unevaluable: int
+    hit_rate: float | None
+
+
+class HorizonResult(Out):
+    status: Literal["hit", "miss", "pending", "unevaluable"]
+    resolves_at: UTCdt
+    end_return: float | None = None
+    max_return: float | None = None
+    min_return: float | None = None
+    end_price_usd: float | None = None
+
+
+class AccuracyItem(Out):
+    signal_id: int
+    token: TokenRef
+    link: str
+    action: Literal["buy", "sell", "hold"]
+    tier: Literal["priority_buy", "possible_buy", "watch", "sell"]
+    tier_label: str
+    prediction: str
+    strength: str
+    headline: str
+    created_at: UTCdt
+    reference_price_usd: float | None
+    results: dict[str, HorizonResult]
+
+
+class AccuracyPage(Out):
+    horizon: Literal["15m", "1h", "6h"]
+    summary: dict[str, dict[str, AccuracyCounts]]
+    items: list[AccuracyItem]
+    total: int
+    page: int
+    page_size: int
+    rules_version: str
+    definition: str = ("COMPRAR = previsão de subida: acerta se o preço ao fim do horizonte ficou acima do preço do sinal. "
+                       "VENDER = previsão de queda: acerta se ficou abaixo. Só conta depois do horizonte; sem coleta "
+                       "contínua na janela fica 'inavaliável'. Observar não é previsão: aparece como referência "
+                       "(quantas vezes subiu mesmo sem sinal). Retornos brutos, sem taxas.")
+
+
+# ---------------- Plano de venda (exit-1) ----------------
+class TakeProfitOut(Out):
+    label: str
+    price_usd: float
+    change_from_reference: float
+    change_from_now: float
+    sell_percent: int
+    reached: bool
+
+
+class StopOut(Out):
+    price_usd: float
+    change_from_reference: float
+    change_from_now: float
+    sell_percent: int
+    reached: bool
+
+
+class LiveFeedOut(Out):
+    """Atualização rápida (`app.live`) do preço usado no plano de venda."""
+
+    status: Literal["live", "waiting", "unavailable", "off"]
+    source: str
+    interval_seconds: int
+    observed_at: UTCdt | None
+    age_seconds: float | None
+    price_usd: float | None
+    liquidity_usd: float | None  # liquidez agregada da fonte rápida (não é a do par)
+    note: str
+    rules_version: str
+
+
+class ExitPlanOut(Out):
+    version: str
+    urgency: Literal["sell_now", "reduce", "hold", "no_data"]
+    headline: str
+    sell_percent_now: int | None
+    keep_percent: int | None
+    reference_price_usd: float | None
+    reference_kind: str | None
+    current_price_usd: float | None = None
+    change_from_reference: float | None = None
+    take_profits: list[TakeProfitOut]
+    stop: StopOut | None
+    triggers: list[str]
+    reasons: list[str]
+    has_position: bool
+    freshness: Freshness
+    live: LiveFeedOut
+    generated_at: UTCdt
+    disclaimer: str
+
+
+class FavoriteCreate(BaseModel):
+    chain_id: str
+    address: str
+    signal_id: int | None = None
+
+
+class FavoriteOut(Out):
+    id: int
+    token: TokenRef
+    link: str
+    signal_id: int | None
+    action: str | None
+    strength: str | None
+    tier_label: str
+    prediction: str
+    headline: str | None
+    reasons: list[str]
+    signal_at: UTCdt
+    favorited_at: UTCdt
+    seconds_signal_to_favorite: float
+    reference_price_usd: float | None
+    price_at_favorite: float | None
+    gain_at_favorite: float | None
+    max_gain_until_favorite: float | None
+    min_gain_until_favorite: float | None
+    value_of_100_usd_at_favorite: float | None
+    liquidity_at_favorite: float | None
+    specs: dict
+
+
+class FavoriteSummary(Out):
+    count: int
+    with_gain: int
+    positive: int
+    negative: int
+    avg_gain_at_favorite: float | None
+    best_gain: float | None
+    best_symbol: str | None
+    worst_gain: float | None
+    worst_symbol: str | None
+
+
+class FavoritePage(Out):
+    items: list[FavoriteOut]
+    summary: FavoriteSummary
+    generated_at: UTCdt
+    rules_version: str
+    disclaimer: str
+
+
+class FavoriteReport(Out):
+    text: str
+    count: int
+    generated_at: UTCdt

@@ -3,25 +3,36 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import or_, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from app import board
 from app.api.deps import api_error, current_user
 from app.api.views import (
     alerts_out,
     build_list_items,
     freshness,
     latest_snapshots,
+    position_out,
     predictions_out,
+    signal_out,
     token_ref,
+    tracked_list_items,
 )
 from app.db import get_db, utcnow
-from app.engine import checks
+from app.engine import checks, exit_plan, outcomes
 from app.engine.pipeline import analyze_token
+from app.engine.signals import advise
 from app.engine.slippage import DEFAULT_POSITIONS_USD, estimate_exit
 from app.ingest.normalize import normalize_address
 from app.ingest.service import source_status, track_token
-from app.models import Alert, Analysis, Pair, PairSnapshot, Prediction, Token
+from app.live import service as live
+from app.safety import service as security
+from app.models import Alert, Analysis, Pair, PairSnapshot, Position, Prediction, SecurityReport, Signal, Token, User
 from app.schemas import (
+    BuySimulationOut,
+    SecurityOut,
+    ExitPlanOut,
     AnalysisOut,
     CheckOut,
     ExitEstimateOut,
@@ -63,6 +74,25 @@ def _get_token(db: Session, chain_id: str, address: str) -> Token:
     return t
 
 
+def _tokens_from_board(con, chain_id, min_liq, max_liq, min_vol, min_age, max_age, risk_level, freshness_status, sort, order, page, page_size):
+    where, args = [], []
+    for sql, value in (("chain_id = ?", chain_id), ("min_filter_liq >= ?", min_liq), ("min_filter_liq <= ?", max_liq), ("min_filter_vol >= ?", min_vol),
+                       ("age >= ?", min_age), ("age <= ?", max_age)):
+        if value not in (None, ""):
+            where.append(sql)
+            args.append(value)
+    for col, values in (("risk_level", risk_level), ("freshness_status", freshness_status)):
+        if values:
+            where.append(f"{col} IN ({','.join('?' * len(values))})")
+            args += list(values)
+    clause = f" WHERE {' AND '.join(where)}" if where else ""
+    total = con.execute(f"SELECT COUNT(*) FROM tokens{clause}", args).fetchone()[0]
+    column = f"s_{sort}"  # `sort` já foi validado contra SORT_FIELDS
+    rows = con.execute(f"SELECT payload FROM tokens{clause} ORDER BY {column} IS NULL, {column} {'DESC' if order == 'desc' else 'ASC'} LIMIT ? OFFSET ?",
+                       [*args, page_size, (page - 1) * page_size]).fetchall()
+    return Page[TokenListItem](items=[TokenListItem.model_validate_json(r[0]) for r in rows], total=total, page=page, page_size=page_size)
+
+
 @router.get("", response_model=Page[TokenListItem])
 def list_tokens(
     db: Session = Depends(get_db),
@@ -91,8 +121,17 @@ def list_tokens(
     if q:
         qs = q.strip()
         stmt = stmt.where(or_(Token.symbol.ilike(f"%{qs}%"), Token.name.ilike(f"%{qs}%"), Token.address == qs, Token.address == qs.lower()))
-    tokens = db.scalars(stmt).all()
-    items = build_list_items(db, list(tokens), source_status(db, dexscreener.SOURCE_NAME)["status"])
+    con = board.read_connection() if tracked is True and not q else None
+    if con is not None:
+        try:
+            return _tokens_from_board(con, chain_id, min_liquidity, max_liquidity, min_volume_h24, min_age_hours, max_age_hours, risk_level,
+                                      freshness_status, sort, order, page, page_size)
+        finally:
+            con.close()
+    if tracked is True and not q:
+        items = [i for i in tracked_list_items(db) if not chain_id or i.token.chain_id == chain_id]
+    else:
+        items = build_list_items(db, list(db.scalars(stmt).all()), source_status(db, dexscreener.SOURCE_NAME)["status"])
 
     def keep(i: TokenListItem) -> bool:
         liq = i.market.liquidity_usd if i.market else None
@@ -149,7 +188,7 @@ def _check_out(c) -> CheckOut | None:
 
 
 @router.get("/{chain_id}/{address}", response_model=TokenDetail)
-def token_detail(chain_id: str, address: str, db: Session = Depends(get_db)):
+def token_detail(chain_id: str, address: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
     t = _get_token(db, chain_id, address)
     src = source_status(db, dexscreener.SOURCE_NAME)["status"]
     base = build_list_items(db, [t], src)[0]
@@ -177,8 +216,19 @@ def token_detail(chain_id: str, address: str, db: Session = Depends(get_db)):
     alerts = db.scalars(select(Alert).where(Alert.token_id == t.id).order_by(Alert.detected_at.desc()).limit(20)).all()
     preds = db.scalars(select(Prediction).where(Prediction.token_id == t.id).order_by(Prediction.created_at.desc()).limit(10)).all()
     exit_est = _exit_estimate(db, t, src, DEFAULT_POSITIONS_USD)
+    sig = db.scalar(select(Signal).where(Signal.token_id == t.id, Signal.status == "active").limit(1))
+    estimates = outcomes.estimate(db, a.opportunity_score, a.risk_score) if a else []
+    pos = db.scalar(select(Position).where(Position.user_id == user.id, Position.token_id == t.id))
+    price_now = base.market.price_usd if base.market else None
+    advice = advise(sig, pos, price_now, exit_est.model_dump() if exit_est else None, user)
+    last_buy = db.scalar(select(Signal).where(Signal.token_id == t.id, Signal.action == "buy", Signal.reference_price_usd.is_not(None))
+                         .order_by(Signal.created_at.desc()).limit(1))
     return TokenDetail(
         **base.model_dump(),
+        buy_simulation=BuySimulationOut(signal_id=last_buy.id, signal_at=last_buy.created_at, entry_price_usd=last_buy.reference_price_usd,
+                                        strength=last_buy.strength) if last_buy else None,
+        signal=signal_out(sig, t, user) if sig else None, estimates=estimates,
+        position=position_out(db, pos, t) if pos else None, advice=advice,
         links=t.links, pairs=[PairOut.model_validate(p) for p in pairs], analysis=analysis, technical_checks=tech,
         recent_alerts=alerts_out(db, list(alerts)), recent_predictions=predictions_out(db, list(preds)),
         exit_estimate=exit_est,
@@ -197,6 +247,48 @@ def _exit_estimate(db: Session, t: Token, src: str, positions) -> ExitEstimateOu
         snap.liquidity_quote if snap else None, snap.liquidity_usd if snap else None, positions,
     )
     return ExitEstimateOut(**est, freshness=freshness(snap.received_at if snap else None, src))
+
+
+@router.get("/{chain_id}/{address}/exit-plan", response_model=ExitPlanOut)
+def token_exit_plan(chain_id: str, address: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Quando e quanto vender (regras `exit-1`) com o preço da atualização rápida (`app.live`).
+
+    Cada consulta mantém o token na lista da atualização rápida por mais 60 s. Sem cotação
+    rápida recente, usa o snapshot do coletor e diz isso em `live`.
+    """
+    t = _get_token(db, chain_id, address)
+    try:
+        live.request_watch(db, t.id)
+    except OperationalError:
+        db.rollback()  # banco ocupado: o pedido entra na próxima consulta, o plano sai mesmo assim
+    feed = live.feed(db, t)
+    src = source_status(db, dexscreener.SOURCE_NAME)["status"]
+    snap = latest_snapshots(db, [t.primary_pair_id]).get(t.primary_pair_id) if t.primary_pair_id else None
+    a = db.scalar(select(Analysis).where(Analysis.token_id == t.id).order_by(Analysis.computed_at.desc()).limit(1))
+    sig = db.scalar(select(Signal).where(Signal.token_id == t.id, Signal.status == "active").limit(1))
+    pos = db.scalar(select(Position).where(Position.user_id == user.id, Position.token_id == t.id))
+    if feed["status"] == "live":
+        price, observed = feed["price_usd"], freshness(feed["observed_at"], "ok")
+        observed.source = feed["source"]
+        alerts, peak = live.live_alerts(db, t.id), live.peak_call(db, t.id)
+    else:
+        price, observed, alerts, peak = (snap.price_usd if snap else None), freshness(snap.received_at if snap else None, src), [], None
+    estimates = outcomes.estimate(db, a.opportunity_score, a.risk_score) if a else []
+    adv = advise(sig, pos, price, None, user)
+    plan = exit_plan.build(price, snap.liquidity_usd if snap else None, a, sig, pos, estimates, adv, alerts, peak)
+    return ExitPlanOut(**plan, has_position=pos is not None, freshness=observed, live=feed, generated_at=utcnow())
+
+
+@router.get("/{chain_id}/{address}/security", response_model=SecurityOut)
+def token_security(chain_id: str, address: str, db: Session = Depends(get_db)):
+    """Última verificação de segurança (`sec-1`). "Sem alertas" nunca significa seguro."""
+    t = _get_token(db, chain_id, address)
+    r = db.get(SecurityReport, t.id)
+    verdict = "danger" if t.rugged_at else r.verdict if r else "unknown"
+    return SecurityOut(verdict=verdict, label=security.LABELS[verdict], checked_at=r.checked_at if r else None, rugged_at=t.rugged_at,
+                       rug_reason=t.rug_reason, checks=r.checks if r else [], holders=r.holders if r else [],
+                       total_holders=(r.facts or {}).get("total_holders") if r else None, service_running=security.running(db),
+                       limitations=security.LIMITATIONS, rules_version=security.RULES_VERSION)
 
 
 @router.get("/{chain_id}/{address}/exit-estimate", response_model=ExitEstimateOut)

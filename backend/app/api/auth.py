@@ -12,7 +12,7 @@ from app.api.deps import api_error, current_session, current_user
 from app.config import get_settings
 from app.db import get_db, utcnow
 from app.models import User, UserSession
-from app.schemas import ChangePasswordRequest, LoginRequest, LoginResponse, UserOut
+from app.schemas import AccountSettings, ChangePasswordRequest, LoginRequest, LoginResponse, UserOut
 from app.security import DUMMY_HASH, hash_password, hash_session_token, new_session_token, verify_password
 
 log = logging.getLogger(__name__)
@@ -87,6 +87,22 @@ def logout(response: Response, sess: UserSession = Depends(current_session), db:
 @router.get("/me", response_model=UserOut)
 def me(user: User = Depends(current_user)):
     return user
+
+
+@router.get("/settings", response_model=AccountSettings)
+def get_settings_route(user: User = Depends(current_user)):
+    return AccountSettings(balance_amount=user.balance_amount, balance_currency=user.balance_currency,
+                           max_trade_percent=user.max_trade_percent)
+
+
+@router.put("/settings", response_model=AccountSettings)
+def put_settings(body: AccountSettings, sess: UserSession = Depends(current_session), db: Session = Depends(get_db)):
+    user = db.get(User, sess.user_id)
+    user.balance_amount = body.balance_amount
+    user.balance_currency = body.balance_currency
+    user.max_trade_percent = body.max_trade_percent
+    db.commit()
+    return body
 
 
 @router.post("/change-password", status_code=204)

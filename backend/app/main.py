@@ -8,9 +8,10 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from sqlalchemy.exc import OperationalError
 
 from app import __version__
-from app.api import alerts, auth, predictions, system, tokens
+from app.api import accuracy, alerts, auth, favorites, opportunities, predictions, signals, system, tokens
 from app.config import get_settings
 from app.logging_setup import setup_logging
 
@@ -38,12 +39,20 @@ def create_app() -> FastAPI:
             body = {"code": "http_error", "message": str(exc.detail)}
         return JSONResponse({"error": body}, status_code=exc.status_code, headers=getattr(exc, "headers", None))
 
+    @app.exception_handler(OperationalError)
+    async def database_busy(_: Request, exc: OperationalError):
+        # SQLite ocupado por uma escrita longa: erro temporário, não falha da aplicação.
+        if "locked" in str(exc.orig).lower() or "busy" in str(exc.orig).lower():
+            return JSONResponse({"error": {"code": "database_busy", "message": "Banco ocupado pelo coletor; tente de novo em instantes."}},
+                                status_code=503, headers={"Retry-After": "2"})
+        raise exc
+
     @app.exception_handler(RequestValidationError)
     async def validation_error(_: Request, exc: RequestValidationError):
         details = [{"loc": list(e.get("loc", [])), "msg": e.get("msg")} for e in exc.errors()]
         return JSONResponse({"error": {"code": "validation_error", "message": "Parâmetros inválidos", "details": details}}, status_code=422)
 
-    for r in (auth.router, system.router, tokens.router, alerts.router, predictions.router):
+    for r in (auth.router, system.router, tokens.router, alerts.router, predictions.router, signals.router, opportunities.router, accuracy.router, favorites.router):
         app.include_router(r, prefix=API_PREFIX)
     _mount_frontend(app, Path(s.frontend_dist_dir))
     return app

@@ -14,28 +14,31 @@ Regras inegociáveis:
 
 ## 2. Rotas e páginas
 
-| Rota | Página | Endpoints |
+Há **exatamente quatro abas principais** na navegação (`routes` em `frontend/src/App.tsx`). As páginas internas são acessadas por links de conteúdo ou pela página Configurações, sem criar outras abas.
+
+| Aba/rota | Página | Endpoints principais |
 |---|---|---|
-| `/login` | Login | `POST /auth/login` |
-| `/` | Visão geral | `GET /dashboard/summary` |
-| `/tokens` | Explorador | `GET /tokens`, `GET /meta`, `POST /tokens/track` |
-| `/tokens/:chainId/:address` | Detalhe do token | `GET /tokens/{c}/{a}`, `/history`, `/exit-estimate`, `DELETE .../track` |
+| `/` | Dashboard | `GET /dashboard/summary` |
+| `/compre-agora` | Compre agora (ranking de oportunidades) | `GET /opportunities` |
 | `/alerts` | Alertas | `GET /alerts`, `PATCH /alerts/{id}` |
-| `/alerts/:id` | Detalhe do alerta (página; em `lg+` pode ser painel lateral sobre a lista) | `GET /alerts/{id}` |
-| `/predictions` | Previsões e desempenho | `GET /predictions`, `GET /predictions/metrics` |
-| `/system` | Fontes e coletores | `GET /system/sources`, `GET /health` |
-| `/account` | Conta (troca de senha, logout) | `POST /auth/change-password`, `POST /auth/logout` |
+| `/settings` | Configurações: saldo de simulação, som, fontes e custo, sistema, senha e sessão | `GET/PUT /auth/settings`, `GET /system/registry`, `GET /health`, `POST /auth/change-password`, `POST /auth/logout` |
+| `/login` | Login | `POST /auth/login` |
+| `/tokens` | Explorador interno, sem aba | `GET /tokens`, `GET /meta`, `POST /tokens/track` |
+| `/tokens/:chainId/:address` | Detalhe do token interno, sem aba | `GET /tokens/{c}/{a}`, `/history`, `/exit-estimate`, `DELETE .../track` |
+| `/alerts/:id` | Detalhe do alerta interno, sem aba | `GET /alerts/{id}` |
+| `/predictions` | Previsões e desempenho interno, sem aba | `GET /predictions`, `GET /predictions/metrics` |
+| `/system` | Saúde, fontes e execuções internas, sem aba | `GET /system/sources`, `GET /health` |
+| `/account` | Compatibilidade: redireciona para `/settings` | — |
 | `*` | 404 com link para `/` | — |
 
 Todas, exceto `/login`, são protegidas: na inicialização, `GET /auth/me`; 401 → `/login?next=<rota>`. Qualquer 401 posterior limpa o cache do TanStack Query e redireciona.
 
 ## 3. Navegação
 
-- Sidebar (≥ 1024 px, 232 px): logo/nome "MemeCoinAI" no topo; itens: Visão geral, Tokens, Alertas (com contador de abertos high+critical), Previsões, Sistema; rodapé: usuário + link Conta. Item ativo: fundo `--surface-3` + borda esquerda 2 px `--text`.
-- 768–1023 px: trilho de ícones de 64 px, com `aria-label` e tooltip.
-- < 768 px: top bar de 56 px com botão de menu (abre drawer com os mesmos itens), título da página e sino de notificações.
-- Top bar (todas as larguras ≥ 768): à direita, `SourceStatusIndicator` (ponto + texto "Fontes OK"/"Fonte degradada"/"Fonte fora do ar", link para `/system`) e o sino de notificações.
-- Banner global (abaixo da top bar) quando `must_change_password=true`: "Senha inicial em uso. Troque antes de expor o sistema." com link para `/account`.
+- Regra fixa: exibir **exatamente quatro abas principais** — Dashboard (`/`), Compre agora (`/compre-agora`), Alertas (`/alerts`) e Configurações (`/settings`). Desktop e drawer móvel mostram as mesmas quatro opções. Cada link da navegação principal expõe seu nome em `aria-label`.
+- Explorador (`/tokens`), detalhe do token (`/tokens/:chainId/:address`), detalhe do alerta (`/alerts/:id`), previsões (`/predictions`) e sistema (`/system`) são páginas internas, não abas. As páginas de token ficam sob Compre agora como aba ativa; previsões e sistema ficam sob Dashboard. `/account` redireciona a `/settings`.
+- Em telas largas, a navegação fica na sidebar; em telas estreitas, a top bar abre um drawer com as quatro abas. A top bar também mostra o estado das fontes (link para `/system`) e o sino de notificações.
+- Banner global (abaixo da top bar) quando `must_change_password=true`: "Senha inicial em uso. Troque antes de expor o sistema." com link para `/settings`.
 - Banner global quando `dexscreener.status == "down"`: "Fonte de mercado indisponível desde HH:MM. Valores exibidos podem estar desatualizados."
 
 ## 4. Hierarquia visual
@@ -66,10 +69,13 @@ Conforme `DESIGN_SYSTEM.md`. Não criar cores fora dos tokens.
 
 ## 11. Gráficos
 
-- Página do token: `PriceChart` com seletor de intervalo `1h | 6h | 24h | 7d` (padrão 24h) e duas abas, Preço e Liquidez. Opcional: volume 1h como histograma abaixo.
-- Legenda fixa: "Pontos coletados por este sistema (~1/min). Lacunas indicam períodos sem coleta." Se `downsampled=true`, mostrar "amostrado".
+- Página do token: `PriceChart` com seletor de intervalo `1h | 6h | 24h | 7d` (padrão 24h), candles verdes/vermelhos e leitura do agente ao selecionar um candle. O seletor usa candles de 1 min, 5 min, 15 min e 1 h, respectivamente; OHLC é agregado dos snapshots do sistema e das cotações rápidas realmente observadas. Não afirmar que os candles representam todos os negócios da DEX nem desenhar volume sem dados.
+- Um clique num candle marca "Começamos aqui" e mostra o sinal vigente, motivos e estimativas empíricas já fornecidas pela API. Se não houver sinal/estimativa, explicar que os dados estão indisponíveis/insuficientes. Não gerar previsão nova na interface.
+- A simulação recebe um valor em USD e um preço inicial escolhido no gráfico (ou preço atual via "Começar agora"). Mostrar quantidade calculada de tokens, valor atual, lucro/prejuízo e retorno percentual, sem enviar ordem e sem alterar a posição registrada. Informar que o resultado é bruto e não inclui taxas ou slippage.
+- O preço rápido usa o feed existente da Jupiter a cada 10 s para Solana; para as outras redes ou quando o serviço estiver indisponível, usar somente o último snapshot do coletor e exibir sua idade. Não prometer atualização instantânea.
+- Converter UTC para o fuso horário local apenas na exibição do eixo e do cursor; manter os timestamps originais para ordenar e calcular candles. Se `downsampled=true`, mostrar "histórico amostrado".
 - Sem pontos: `EmptyState` "Sem histórico neste intervalo" (não desenhar eixo vazio).
-- O gráfico deve caber em 320 px de largura sem rolagem.
+- O gráfico, campo e painel lateral devem caber em 320 px de largura sem rolagem horizontal.
 
 ## 12. Notificações
 

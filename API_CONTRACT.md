@@ -139,9 +139,63 @@ Filtros: `status` (repetível: `pending`, `evaluated`, `unevaluable`), `target`,
 ### `GET /predictions/metrics?target=`
 Lista de `PredictionMetricsOut` por alvo: contagens, `observed_rate`, `brier_model`, `brier_baseline`, `brier_model_where_baseline`, `thresholds[]` (precisão/recall/FP), `calibration_bins[]`, `by_liquidity[]`, `sufficient_sample`, `notes[]`.
 
+## Sinais, estimativas e posição (implementado em 2026-10-28, sessão 3)
+
+### `GET /signals`
+Filtros: `action` (repetível: `buy`, `sell`, `avoid`, `hold`), `strength` (repetível: `strong`, `moderate`, `none`), `status` (`active`, padrão, ou `all`), `after_id` (somente id maior; usado pelo alerta global), paginação. Ordem: id desc.
+`SignalOut { id, token, action, strength, status, headline, reasons[], risk_score, risk_level, opportunity_score, reference_price_usd, estimates: HorizonEstimateOut[], created_at, last_confirmed_at, rules_version, link }`. Um sinal ativo por token; um sinal novo (id novo) só surge quando a ação muda ou a força aumenta.
+
+### `GET /signals/{id}` → `SignalOut`. `GET /signals/performance` → acerto histórico por ação, força e horizonte (`SignalPerformanceOut { action, strength, horizon, n, hit_rate, big_move_rate, median_end_return, definition }`).
+
+### `HorizonEstimateOut`
+`{ horizon: "15m"|"1h"|"6h", horizon_seconds, basis: "similar"|"general"|"insufficient", n, needed, end_p25, end_median, end_p75, max_median, p_up_10, p_up_20, p_up_50, p_down_20, p_end_positive, method_version }`. Retornos e probabilidades são **frações** (0.12 = +12%). Com `basis = insufficient`, os campos numéricos são `null` e `needed` informa quantos casos faltam.
+
+### Posições (por usuário; informadas manualmente)
+- `GET /positions` → `PositionOut[] { token, quantity, entry_price_usd, current_price_usd, value_usd, pnl, updated_at, link }`.
+- `PUT /positions/{chain_id}/{address}` body `{ quantity > 0, entry_price_usd?: > 0 }` → `PositionOut`.
+- `DELETE /positions/{chain_id}/{address}` → 204.
+
+### Campos novos em `GET /tokens/{chain}/{address}`
+`signal` (`SignalOut` | null), `estimates` (`HorizonEstimateOut[]`), `position` (`PositionOut` | null), `advice` (`AdviceOut { version, has_position, action: buy|sell|hold|none, summary, reasons[], sell_percent, keep_percent, buy_percent_of_plan, position_value_usd, pnl, slippage_note, disclaimer }`).
+
+Novos tipos de alerta: `buy_signal` (opportunity) e `sell_signal` (risk).
+
+### `GET /opportunities` (aba "Compre agora", `rank-1`)
+Filtros: `tier` (repetível: `priority_buy`, `possible_buy`, `watch`, `avoid`; padrão todos), `sort` (`tier` padrão, `score`, `score_change`, `liquidity_usd`, `volume_h24`, `price_change_h1`, `risk_score`), `min_liquidity`, `max_age_hours`, `page`, `page_size` (até 100). Valores ausentes ficam no fim da ordenação.
+Resposta `OpportunityPage { items, total, page, page_size, counts {tier: n}, generated_at, ranking_version, disclaimer }`. Cada item: `token`, `link`, `tier`, `tier_label`, `decision_quality` (`ok` | `partial` | `no_reliable_signal`), `decision_quality_reason`, `score`, `score_previous`, `score_change`, `confidence`, `coverage`, `risk_score`, `risk_level`, `critical_blocks[]`, `reasons_for[]`, `reasons_against[]`, `missing_data[]`, `price_usd`, `price_change_h1`, `price_change_h24`, `liquidity_usd`, `volume_h24`, `pair_age_hours`, `dex_id`, `freshness`, `signal_headline`, `signal_since`, `allocation`, `computed_at`, `ranking_version`. Score, confiança e cobertura são campos separados; `no_reliable_signal` só ocorre com preço/liquidez ausentes ou cotação velha.
+
+### `GET /system/registry`
+36 fontes do fluxograma: `{ key, name, role, access_class: A|B|C|D, access_label, enabled, integration, needs_key, verified_on, verification, limits, fallback }`.
+
+### `GET /health` (público) — campo novo
+`worker { status: running|stopped|unknown, last_cycle_at, age_seconds, expected_interval_seconds }`, derivado da última coleta concluída. `status` geral fica `degraded` quando o worker não está rodando.
+
+### Erro 503 `database_busy`
+Quando o SQLite está ocupado por uma escrita do coletor, a API responde 503 com `Retry-After: 2` em vez de 500.
+
+### `GET /accuracy` (aba Acertos, `acc-1`)
+Parâmetros: `horizon` (`15m`, `1h` padrão, `6h`), `action` (`buy`, `sell`), `result` (`hit`, `miss`, `pending`, `unevaluable`), paginação. Resposta `AccuracyPage { horizon, summary[horizonte][buy|sell|all] = {hits, misses, evaluated, pending, unevaluable, hit_rate}, items[], total, rules_version, definition }`. Item: `signal_id, token, link, action, prediction ("Deve subir"/"Deve descer"), strength, headline, created_at, reference_price_usd, results[horizonte] = {status, resolves_at, end_return, max_return, min_return, end_price_usd}`.
+
+### `GET /tokens/{chain_id}/{address}/exit-plan` (`exit-1`)
+`ExitPlanOut { urgency: sell_now|reduce|hold|no_data, headline, sell_percent_now, keep_percent, reference_price_usd, reference_kind, current_price_usd, change_from_reference, take_profits[{label, price_usd, change_from_reference, change_from_now, sell_percent, reached}], stop{...}, triggers[], reasons[], has_position, freshness, live, generated_at, disclaimer }`. Leve, para atualizar a cada 10 s.
+- Cada consulta mantém o token na atualização rápida (`app.live`, D-016) por mais 60 s.
+- `live: LiveFeedOut { status: live|waiting|unavailable|off, source, interval_seconds, observed_at, age_seconds, price_usd, liquidity_usd, note, rules_version }`. Com `live`, `current_price_usd` e `freshness` vêm da cotação rápida (`freshness.source = "jupiter_price"`); nos outros estados, do coletor.
+- `reasons` pode trazer alertas ao vivo ("Liquidez retirada agora… padrão de golpe", "Preço despencou…"), que forçam `urgency = sell_now`.
+- `GET /health` inclui `live: LiveServiceOut { status: running|stopped|unknown, last_tick_at, age_seconds, interval_seconds, watched, quoted, last_error, source }`.
+
+### Favoritados (`fav-1`, por usuário)
+- `POST /favorites` `{ chain_id, address, signal_id? }` → 201 `FavoriteOut`; sem `signal_id`, usa o sinal ativo; repetir devolve o registro original; 404 para token ou sinal desconhecido.
+- `GET /favorites` → `FavoritePage { items, summary, generated_at, rules_version, disclaimer }`. Ganhos congelados no clique: frações (0,5 = +50%), brutos, e nulos sem dado.
+- `GET /favorites/report` → `{ text, count, generated_at }`: resumo legível + JSON completo.
+- `DELETE /favorites/{id}` → 204; 404 se for de outro usuário.
+
+### Saldo para simulação (por usuário)
+- `GET /auth/settings` → `AccountSettings { balance_amount: number|null, balance_currency: "BRL"|"USD", max_trade_percent: 0–100 (padrão 10) }`.
+- `PUT /auth/settings` (mesmo corpo) → `AccountSettings`. 422 para saldo negativo ou percentual fora de (0, 100].
+- `SignalOut.allocation` (`AllocationOut { percent_of_balance, amount, currency, max_trade_percent, rule }` | null) e `AdviceOut.buy_percent_of_balance`, `buy_amount`, `currency`: calculados para o usuário da sessão, só em sinais de compra e com saldo informado.
+
 ## PLANEJADO (não implementado — não criar telas funcionais para isso)
 
-- Registro de posição do usuário e recomendação personalizada de saída.
 - Inteligência de carteiras (`/wallets/...`).
 - Métricas sociais.
 - Notificações push/e-mail.

@@ -269,6 +269,7 @@ def test_stale_data_is_flagged(auth_client, fake_dex, db):
     auth_client.post(f"{API}/tokens/track", json={"chain_id": "solana", "address": SOL_MINT})
     snap = db.scalars(select(PairSnapshot)).first()
     snap.received_at = utcnow() - timedelta(hours=2)
+    db.scalars(select(Token)).first().last_refreshed_at = utcnow() - timedelta(hours=2)  # nem conferido na fonte
     db.commit()
     item = auth_client.get(f"{API}/tokens").json()["items"][0]
     assert item["freshness"]["status"] == "stale"

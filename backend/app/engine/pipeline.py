@@ -5,14 +5,18 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models import SecurityReport
+from app.safety.service import apply_to_decision, detect_rug
+from app.engine.scoring import Factor, risk_level
+from app.config import get_settings
 from app.db import utcnow
-from app.engine import checks
-from app.engine.alerts import evaluate_rules, resolve_absent, upsert_alert
+from app.engine import burst, checks, outcomes, signals
+from app.engine.alerts import AlertCandidate, evaluate_rules, resolve_absent, upsert_alert
 from app.engine.features import SnapshotView, compute_features
 from app.engine.predict import maybe_create_predictions
 from app.engine.scoring import ENGINE_VERSION, score_opportunity, score_risk
 from app.ingest.service import source_status
-from app.models import Alert, Analysis, Pair, PairSnapshot, RiskCheck, Token
+from app.models import Alert, Analysis, Pair, PairSnapshot, RiskCheck, Signal, Token
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +25,11 @@ FEATURE_LOOKBACK = timedelta(hours=2)
 MIN_PERSIST_INTERVAL = timedelta(minutes=5)
 MIN_SCORE_DELTA = 5.0
 INSUFFICIENT_DATA_GRACE = timedelta(hours=1)
+
+
+def fresh_enough(features: dict) -> bool:
+    age = features.get("data_age_seconds")
+    return age is not None and age <= get_settings().fresh_max_age_seconds
 
 
 def _check_dict(c: RiskCheck | None) -> dict | None:
@@ -101,6 +110,11 @@ def build_analysis(db: Session, token: Token, as_of: datetime | None = None) -> 
 def analyze_token(db: Session, token: Token, as_of: datetime | None = None, force: bool = False) -> Analysis | None:
     as_of = as_of or utcnow()
     features, risk, opp, mint_d, prev_d, snap, pair = build_analysis(db, token, as_of)
+    if not token.rugged_at and (rug := detect_rug(features)):
+        token.rugged_at, token.rug_reason = as_of, rug
+    if token.rugged_at:  # a marca nunca expira: a janela de 1 h das outras regras esquecia o golpe
+        risk.factors.append(Factor("R1_rugged", "market", f"Golpe detectado: {token.rug_reason or 'queda brusca'}", 100, "critical", 0.9, {}))
+        risk.score, risk.level = 100.0, risk_level(100.0)
 
     last = db.scalar(
         select(Analysis).where(Analysis.token_id == token.id).order_by(Analysis.computed_at.desc()).limit(1)
@@ -141,6 +155,30 @@ def analyze_token(db: Session, token: Token, as_of: datetime | None = None, forc
     if as_of - token.first_seen_at < INSUFFICIENT_DATA_GRACE:
         # Todo token novo começa sem histórico/verificações; só alerta se persistir.
         candidates = [c for c in candidates if c.alert_type != "insufficient_data"]
+
+    detected = burst.detect(features)
+    if detected and fresh_enough(features) and not token.rugged_at:
+        stats = burst.pattern_stats(db, as_of)
+        extreme = detected["strength"] == "extreme"
+        candidates.append(AlertCandidate(
+            "pump_burst", "critical" if extreme else "high",
+            "Disparo agora: alta forte em andamento" if extreme else "Disparo agora: volume e compras acelerando",
+            "; ".join(detected["reasons"]),
+            {**detected["evidence"], "strength": detected["strength"], "pattern_stats": stats},
+            0.5, snap.received_at if snap else None,
+        ))
+
+    estimates = outcomes.estimate(db, analysis.opportunity_score, analysis.risk_score, as_of)
+    prev = db.scalar(select(Signal).where(Signal.token_id == token.id, Signal.status == "active").limit(1))
+    decision = signals.decide(analysis, features, estimates, fresh_enough(features),
+                              previous=(prev.action, prev.strength) if prev else None)
+    if get_settings().security_gate:
+        report = db.get(SecurityReport, token.id)
+        decision = apply_to_decision(decision, report.verdict if report else None)
+    sig, _ = signals.upsert_signal(db, token.id, analysis, decision, estimates, features.get("price_usd"))
+    sig_alert = signals.alert_for(sig)
+    if sig_alert:
+        candidates.append(sig_alert)
     for c in candidates:
         upsert_alert(db, c, token.id, pair.id if pair else None, analysis.id)
     resolve_absent(db, token.id, {c.alert_type for c in candidates})
@@ -167,8 +205,6 @@ def analyze_tokens(db: Session, token_ids: set[int] | list[int], as_of: datetime
 
 def sync_source_alerts(db: Session, sources: tuple[str, ...]) -> None:
     """Abre alerta de sistema quando a fonte cai; resolve quando volta."""
-    from app.engine.alerts import AlertCandidate
-
     for src in sources:
         st = source_status(db, src)
         key = f"source_unavailable:system:{src}"

@@ -13,7 +13,10 @@ Estados: não iniciado · em andamento · implementado, não verificado · valid
 | T-007 | P1 | API de tokens/alertas/previsões/dashboard/sistema | testes de integração | T-002..T-006 | validado com testes |
 | T-008 | P1 | Previsões baseline + avaliação + métricas | testes | T-005 | validado com testes (modelo não calibrado) |
 | T-009 | P1 | Especificação do frontend para o Codex | 6 documentos revisados | T-007 | validado (revisão documental) |
-| T-010 | P1 | Frontend (Codex) | critérios de `FRONTEND_SPEC.md` §23 | T-009 + autorização do usuário | não iniciado |
+| T-010 | P1 | Frontend (Codex) | critérios de `FRONTEND_SPEC.md` §23 | T-009 + autorização do usuário | parcialmente implementado (integrado; e2e e refinamentos do CODEX_LOG pendentes) |
+| T-025 | P1 | Sinais de compra/venda em destaque (modal global), estimativa por horizonte e sugestão de % com posição registrada | regras + estimativas + posição + modal, testados e verificados no navegador | — | validado com testes (regras não calibradas historicamente) |
+| T-026 | P1 | Calibrar limiares dos sinais com o desempenho real (`/signals/performance`) | ≥ 100 sinais avaliados por tipo; limiares revistos com divisão temporal | coletor rodando por dias | não iniciado |
+| T-027 | P2 | Página "Desempenho dos sinais" na interface (acerto por tipo/horizonte) | tela consumindo `/signals/performance` | T-026 parcial | não iniciado |
 | T-011 | P1 | Worker: execução prolongada (≥ 6 h) com dados reais; conferir que previsões são avaliadas | logs + métricas com `evaluated > 0` | — | implementado, não verificado |
 | T-012 | P3 | Rodar a suíte contra PostgreSQL (opcional após D-013) | testes passam em PG | PostgreSQL disponível | não iniciado |
 | T-013 | P1 | Integração frontend ↔ backend + revisão do Claude | e2e login→alerta→token correto, mobile e desktop | T-010 | não iniciado |

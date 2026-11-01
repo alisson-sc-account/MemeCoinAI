@@ -29,6 +29,9 @@ ALERT_TYPES = {
     "insufficient_data": "risk",
     "volume_spike": "opportunity",
     "opportunity_candidate": "opportunity",
+    "pump_burst": "opportunity",
+    "buy_signal": "opportunity",
+    "sell_signal": "risk",
     "source_unavailable": "system",
 }
 
@@ -168,6 +171,7 @@ def resolve_absent(db: Session, token_id: int, active_types: set[str]) -> int:
     condition_types = {
         "mint_authority_active", "freeze_authority_active", "risky_token_extensions", "holder_concentration",
         "sell_pressure", "risk_high", "insufficient_data", "volume_spike", "opportunity_candidate",
+        "buy_signal", "sell_signal", "pump_burst",
     }
     to_resolve = db.scalars(
         select(Alert).where(

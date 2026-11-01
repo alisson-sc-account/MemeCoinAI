@@ -34,6 +34,11 @@ class User(Base):
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     last_login_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    # Saldo informado pelo usuário para dimensionar sugestões (simulação; não é lido de corretora).
+    balance_amount: Mapped[float | None] = mapped_column(Float)
+    balance_currency: Mapped[str] = mapped_column(String(3), default="BRL", server_default="BRL")
+    # Teto de exposição por operação, em % do saldo (gestão de risco).
+    max_trade_percent: Mapped[float] = mapped_column(Float, default=10.0, server_default="10")
 
 
 class UserSession(Base):
@@ -64,6 +69,11 @@ class Token(Base):
     discovered_via: Mapped[str] = mapped_column(String(64))
     first_seen_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     is_tracked: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    # Volume da última hora: decide quem é atualizado em todo ciclo.
+    heat: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")
+    # Marca permanente: uma vez golpe, nunca mais volta a parecer segura.
+    rugged_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    rug_reason: Mapped[str | None] = mapped_column(Text)
     # Links públicos informados pela fonte (site, twitter, telegram). Não são validados.
     links: Mapped[list | None] = mapped_column(JSON)
     image_url: Mapped[str | None] = mapped_column(Text)
@@ -245,6 +255,76 @@ class Prediction(Base):
     outcome_detail: Mapped[str | None] = mapped_column(Text)
 
 
+class AnalysisOutcome(Base):
+    """Retorno observado DEPOIS de uma análise, por horizonte (rótulo para estimativas).
+
+    Só é gravado quando o horizonte já terminou: nunca contém dados futuros em
+    relação ao instante em que é usado.
+    """
+
+    __tablename__ = "analysis_outcomes"
+    __table_args__ = (
+        UniqueConstraint("analysis_id", "horizon_seconds", name="uq_outcome_analysis_horizon"),
+        Index("ix_outcome_horizon_time", "horizon_seconds", "analysis_time"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    analysis_id: Mapped[int] = mapped_column(ForeignKey("analyses.id", ondelete="CASCADE"))
+    token_id: Mapped[int] = mapped_column(ForeignKey("tokens.id", ondelete="CASCADE"))
+    horizon_seconds: Mapped[int] = mapped_column(Integer)
+    analysis_time: Mapped[datetime] = mapped_column(UTCDateTime)
+    opportunity_score: Mapped[float] = mapped_column(Float)
+    risk_score: Mapped[float] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(16))  # ok | unevaluable
+    max_return: Mapped[float | None] = mapped_column(Float)
+    min_return: Mapped[float | None] = mapped_column(Float)
+    end_return: Mapped[float | None] = mapped_column(Float)
+    observations: Mapped[int] = mapped_column(Integer, default=0)
+    labeled_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class Signal(Base):
+    """Sinal acionável (comprar/vender/evitar/aguardar) derivado de uma análise."""
+
+    __tablename__ = "signals"
+    __table_args__ = (
+        Index("ix_signal_token_status", "token_id", "status"),
+        Index("ix_signal_created", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    token_id: Mapped[int] = mapped_column(ForeignKey("tokens.id", ondelete="CASCADE"))
+    analysis_id: Mapped[int | None] = mapped_column(ForeignKey("analyses.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    last_confirmed_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    action: Mapped[str] = mapped_column(String(16))  # buy | sell | avoid | hold
+    strength: Mapped[str] = mapped_column(String(16))  # strong | moderate | none
+    status: Mapped[str] = mapped_column(String(16), default="active")  # active | superseded
+    headline: Mapped[str] = mapped_column(String(256))
+    reasons: Mapped[list] = mapped_column(JSON)
+    risk_score: Mapped[float] = mapped_column(Float)
+    risk_level: Mapped[str] = mapped_column(String(16))
+    opportunity_score: Mapped[float] = mapped_column(Float)
+    reference_price_usd: Mapped[float | None] = mapped_column(Float)
+    estimates: Mapped[list] = mapped_column(JSON)
+    rules_version: Mapped[str] = mapped_column(String(16))
+
+
+class Position(Base):
+    """Posição declarada pelo usuário (não é lida de carteira; não executa ordens)."""
+
+    __tablename__ = "positions"
+    __table_args__ = (UniqueConstraint("user_id", "token_id", name="uq_position_user_token"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    token_id: Mapped[int] = mapped_column(ForeignKey("tokens.id", ondelete="CASCADE"))
+    quantity: Mapped[float] = mapped_column(Float)
+    entry_price_usd: Mapped[float | None] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
 class CollectorRun(Base):
     """Uma execução de coleta. Base para estado das fontes e latência."""
 
@@ -265,3 +345,102 @@ class CollectorRun(Base):
     rate_limited: Mapped[int] = mapped_column(Integer, default=0)
     latency_ms_avg: Mapped[float | None] = mapped_column(Float)
     error_message: Mapped[str | None] = mapped_column(Text)
+
+
+# ---------------- Atualização rápida (`app.live`) ----------------
+class LiveWatch(Base):
+    """Token que o quadro "Quando vender" pediu há pouco: a atualização rápida o acompanha."""
+
+    __tablename__ = "live_watch"
+
+    token_id: Mapped[int] = mapped_column(ForeignKey("tokens.id", ondelete="CASCADE"), primary_key=True)
+    first_requested_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    last_requested_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class LiveQuote(Base):
+    """Cotação rápida (a cada ~10 s) de um token. Fonte separada dos snapshots do coletor.
+
+    `liquidity_usd` é a liquidez AGREGADA que a fonte informa (todas as pools), não a
+    liquidez do par principal: só é comparada com outras cotações rápidas.
+    """
+
+    __tablename__ = "live_quotes"
+    __table_args__ = (Index("ix_live_token_received", "token_id", "received_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    token_id: Mapped[int] = mapped_column(ForeignKey("tokens.id", ondelete="CASCADE"))
+    source: Mapped[str] = mapped_column(String(32))
+    received_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    price_usd: Mapped[float] = mapped_column(Float)
+    liquidity_usd: Mapped[float | None] = mapped_column(Float)
+    block_id: Mapped[int | None] = mapped_column(Integer)
+
+
+class ServiceHeartbeat(Base):
+    """Batimento de um serviço de longa duração (um registro por serviço, sobrescrito a cada ciclo)."""
+
+    __tablename__ = "service_heartbeats"
+
+    name: Mapped[str] = mapped_column(String(32), primary_key=True)
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    last_tick_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    last_ok_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    interval_seconds: Mapped[int] = mapped_column(Integer)
+    watched: Mapped[int] = mapped_column(Integer, default=0)
+    quoted: Mapped[int] = mapped_column(Integer, default=0)
+    last_duration_ms: Mapped[float | None] = mapped_column(Float)
+
+
+class Favorite(Base):
+    """Previsão favoritada: foto imutável do ganho e das especificações no momento do clique."""
+
+    __tablename__ = "favorites"
+    __table_args__ = (Index("ix_favorite_user_time", "user_id", "favorited_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    token_id: Mapped[int] = mapped_column(ForeignKey("tokens.id", ondelete="CASCADE"))
+    signal_id: Mapped[int | None] = mapped_column(ForeignKey("signals.id", ondelete="SET NULL"))
+    favorited_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    signal_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    action: Mapped[str | None] = mapped_column(String(16))
+    strength: Mapped[str | None] = mapped_column(String(16))
+    headline: Mapped[str | None] = mapped_column(String(256))
+    reasons: Mapped[list] = mapped_column(JSON)
+    reference_price_usd: Mapped[float | None] = mapped_column(Float)
+    price_at_favorite: Mapped[float | None] = mapped_column(Float)
+    gain_at_favorite: Mapped[float | None] = mapped_column(Float)
+    max_gain_until_favorite: Mapped[float | None] = mapped_column(Float)
+    min_gain_until_favorite: Mapped[float | None] = mapped_column(Float)
+    liquidity_at_favorite: Mapped[float | None] = mapped_column(Float)
+    specs: Mapped[dict] = mapped_column(JSON)
+    rules_version: Mapped[str] = mapped_column(String(16))
+
+
+class SecurityReport(Base):
+    """Última verificação de segurança de uma moeda (`app.safety`)."""
+
+    __tablename__ = "security_reports"
+
+    token_id: Mapped[int] = mapped_column(ForeignKey("tokens.id", ondelete="CASCADE"), primary_key=True)
+    checked_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    verdict: Mapped[str] = mapped_column(String(16))  # danger | caution | clear | unknown
+    checks: Mapped[list] = mapped_column(JSON)
+    holders: Mapped[list] = mapped_column(JSON)
+    facts: Mapped[dict] = mapped_column(JSON)
+    rules_version: Mapped[str] = mapped_column(String(16))
+
+
+class WalletProfile(Base):
+    """Idade e origem do dinheiro de uma carteira. A 1ª transação nunca muda, então fica guardada."""
+
+    __tablename__ = "wallet_profiles"
+
+    address: Mapped[str] = mapped_column(String(64), primary_key=True)
+    first_seen_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    signatures: Mapped[int] = mapped_column(Integer)
+    complete: Mapped[bool] = mapped_column(Boolean)  # False: 1000+ transações, começo desconhecido
+    funder: Mapped[str | None] = mapped_column(String(64))
+    checked_at: Mapped[datetime] = mapped_column(UTCDateTime)

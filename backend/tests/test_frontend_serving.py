@@ -21,7 +21,9 @@ def test_spa_served_with_fallback_and_api_isolated(tmp_path, monkeypatch, isolat
     assert "nao servir" not in c.get("/../secret.txt").text
     r = c.get("/api/v1/inexistente")
     assert r.status_code == 404 and r.json()["error"]["code"] == "not_found"
-    assert c.get("/api/v1/health").json()["status"] == "ok"
+    # A API continua acessível com o SPA montado (status "degraded" aqui é esperado: sem worker no teste).
+    h = c.get("/api/v1/health")
+    assert h.status_code == 200 and h.json()["database"] == "ok"
 
 
 def test_no_frontend_build_means_no_catch_all(isolated_db, monkeypatch, tmp_path):

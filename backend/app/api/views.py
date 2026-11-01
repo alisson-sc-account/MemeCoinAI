@@ -1,4 +1,6 @@
 """Montagem das respostas a partir do banco (consultas de leitura)."""
+import threading
+import time
 from datetime import datetime
 
 from sqlalchemy import func, select
@@ -6,14 +8,18 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import utcnow
-from app.models import Alert, Analysis, Pair, PairSnapshot, Prediction, Token
+from app.engine.signals import allocation
+from app.ingest.service import source_status
+from app.models import Alert, Analysis, Pair, PairSnapshot, Position, Prediction, Signal, Token
 from app.schemas import (
     AlertOut,
     Freshness,
     MarketOut,
     PairOut,
+    PositionOut,
     PredictionOut,
     ScoresOut,
+    SignalOut,
     TokenListItem,
     TokenRef,
 )
@@ -42,6 +48,24 @@ def freshness(observed_at: datetime | None, source_state: str) -> Freshness:
     if source_state == "down" and status == "fresh":
         status = "delayed"
     return Freshness(observed_at=observed_at, age_seconds=round(age, 1), status=status, source=dexscreener.SOURCE_NAME, source_status=source_state)
+
+
+_list_cache: tuple[float, list] | None = None
+_list_lock = threading.Lock()
+
+
+def tracked_list_items(db: Session) -> list:
+    """Todos os monitorados, calculados no máximo a cada `list_cache_seconds`: com 10 mil tokens a
+    conta é pesada, e várias telas pedem a mesma lista."""
+    global _list_cache
+    ttl = get_settings().list_cache_seconds
+    with _list_lock:
+        if ttl > 0 and _list_cache and time.monotonic() - _list_cache[0] < ttl:
+            return _list_cache[1]
+        tokens = list(db.scalars(select(Token).where(Token.is_tracked.is_(True))))
+        items = build_list_items(db, tokens, source_status(db, dexscreener.SOURCE_NAME)["status"])
+        _list_cache = (time.monotonic(), items)
+        return items
 
 
 def latest_snapshots(db: Session, pair_ids: list[int]) -> dict[int, PairSnapshot]:
@@ -101,6 +125,13 @@ def scores_out(a: Analysis | None) -> ScoresOut | None:
     )
 
 
+def _checked_at(snap: PairSnapshot | None, token: Token) -> datetime | None:
+    """Última conferência na fonte. Resposta igual à anterior não vira snapshot, mas o dado foi conferido."""
+    if snap is None:
+        return None
+    return max(snap.received_at, token.last_refreshed_at) if token.last_refreshed_at else snap.received_at
+
+
 def build_list_items(db: Session, tokens: list[Token], source_state: str) -> list[TokenListItem]:
     pair_ids = [t.primary_pair_id for t in tokens if t.primary_pair_id]
     pairs = {p.id: p for p in db.scalars(select(Pair).where(Pair.id.in_(pair_ids)))} if pair_ids else {}
@@ -116,7 +147,7 @@ def build_list_items(db: Session, tokens: list[Token], source_state: str) -> lis
             token=token_ref(t), discovered_via=t.discovered_via, first_seen_at=t.first_seen_at, is_tracked=t.is_tracked,
             pair=PairOut.model_validate(p) if p else None,
             pair_age_hours=round((now - p.pair_created_at).total_seconds() / 3600, 3) if p and p.pair_created_at else None,
-            market=market_out(s), freshness=freshness(s.received_at if s else None, source_state),
+            market=market_out(s), freshness=freshness(_checked_at(s, t), source_state),
             scores=scores_out(analyses.get(t.id)), open_alerts=counts.get(t.id, 0),
         ))
     return items
@@ -139,6 +170,35 @@ def alerts_out(db: Session, alerts: list[Alert]) -> list[AlertOut]:
     toks = {t.id: t for t in db.scalars(select(Token).where(Token.id.in_(tids)))} if tids else {}
     prs = {p.id: p for p in db.scalars(select(Pair).where(Pair.id.in_(pids)))} if pids else {}
     return [alert_out(a, toks.get(a.token_id), prs.get(a.pair_id)) for a in alerts]
+
+
+def position_out(db: Session, p: Position, token: Token) -> PositionOut:
+    snap = latest_snapshots(db, [token.primary_pair_id]).get(token.primary_pair_id) if token.primary_pair_id else None
+    price = snap.price_usd if snap else None
+    return PositionOut(
+        token=token_ref(token), quantity=p.quantity, entry_price_usd=p.entry_price_usd, current_price_usd=price,
+        value_usd=round(p.quantity * price, 2) if price else None,
+        pnl=round(price / p.entry_price_usd - 1, 4) if price and p.entry_price_usd else None,
+        updated_at=p.updated_at, link=token_link(token),
+    )
+
+
+def signal_out(s: Signal, token: Token, user=None) -> SignalOut:
+    alloc = None
+    if user is not None:
+        alloc = allocation(s.action, s.strength, s.risk_score, user.balance_amount, user.balance_currency, user.max_trade_percent)
+    return SignalOut(
+        id=s.id, allocation=alloc, token=token_ref(token), action=s.action, strength=s.strength, status=s.status, headline=s.headline,
+        reasons=s.reasons or [], risk_score=s.risk_score, risk_level=s.risk_level, opportunity_score=s.opportunity_score,
+        reference_price_usd=s.reference_price_usd, estimates=s.estimates or [], created_at=s.created_at,
+        last_confirmed_at=s.last_confirmed_at, rules_version=s.rules_version, link=token_link(token),
+    )
+
+
+def signals_out(db: Session, rows: list[Signal], user=None) -> list[SignalOut]:
+    tids = {s.token_id for s in rows}
+    toks = {t.id: t for t in db.scalars(select(Token).where(Token.id.in_(tids)))} if tids else {}
+    return [signal_out(s, toks[s.token_id], user) for s in rows if s.token_id in toks]
 
 
 def prediction_out(p: Prediction, token: Token) -> PredictionOut:

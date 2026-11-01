@@ -1,0 +1,76 @@
+.hero { border: 1px solid var(--border); border-left: 4px solid var(--text-muted); background: var(--surface-1); border-radius: var(--radius-md); padding: var(--space-4); display: grid; gap: var(--space-3); }
+.hero.buy { border-left-color: var(--risk-low); }
+.hero.sell { border-left-color: var(--risk-critical); }
+.hero.avoid { border-left-color: var(--risk-high); }
+.heroTop { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.headline { font-size: 20px; line-height: 26px; font-weight: 600; margin: 0; }
+.action { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: var(--radius-sm); font-weight: 600; font-size: 13px; letter-spacing: .02em; border: 1px solid currentColor; }
+.action.buy { color: var(--risk-low); }
+.action.sell { color: var(--risk-critical); }
+.action.avoid { color: var(--risk-high); }
+.action.hold { color: var(--text-muted); }
+.reasons { margin: 0; padding-left: 18px; color: var(--text-muted); }
+.meta { color: var(--text-subtle); font-size: 12px; }
+.estimates { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
+.estimate { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3); display: grid; gap: 4px; min-width: 0; }
+.estimate b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.estimate small { color: var(--text-muted); }
+.up { color: var(--positive); }
+.down { color: var(--negative); }
+.advice { font-size: 18px; font-weight: 600; margin: 0; }
+.form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; gap: var(--space-3); align-items: end; }
+.form label { display: grid; gap: 4px; font-size: 13px; color: var(--text-muted); }
+.form input { height: 36px; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); color: var(--text); padding: 0 10px; min-width: 0; }
+.select { height: 36px; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); color: var(--text); padding: 0 8px; }
+.row { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.btn { height: 36px; padding: 0 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: transparent; color: var(--text); cursor: pointer; }
+.btnPrimary { composes: btn; background: #ededed; color: #0a0a0a; border-color: #ededed; font-weight: 600; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.error { color: var(--risk-critical); font-size: 13px; }
+.list { display: grid; gap: var(--space-2); }
+.signalRow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); color: inherit; text-decoration: none; background: var(--surface-1); }
+.signalRow:hover { background: var(--surface-2); }
+.signalRow span { min-width: 0; overflow-wrap: anywhere; }
+.shade { position: fixed; inset: 0; background: rgba(0, 0, 0, .72); display: grid; place-items: center; z-index: 100; padding: 16px; }
+.modal { width: min(520px, 100%); max-height: calc(100dvh - 32px); overflow: auto; background: var(--surface-1); border: 1px solid var(--border-strong); border-radius: var(--radius-md); box-shadow: 0 8px 24px rgba(0, 0, 0, .5); padding: var(--space-6); display: grid; gap: var(--space-4); }
+.modal.buy { border-top: 4px solid var(--risk-low); }
+.modal.sell { border-top: 4px solid var(--risk-critical); }
+.modal.burst { border-top: 4px solid var(--opportunity); }
+.action.burst { color: var(--opportunity); }
+.hero.burst { border-left-color: var(--opportunity); }
+.stats { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3); display: grid; gap: 4px; }
+.stats b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.nowBox { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); display: grid; gap: 4px; }
+.nowBox small { color: var(--text-muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.nowBox p { margin: 0; }
+.steps { margin: 0; padding-left: 22px; display: grid; gap: 6px; line-height: 1.45; }
+.stepDone { color: var(--text-subtle); text-decoration: line-through; }
+.stepAlert { color: var(--risk-critical); font-weight: 600; }
+.big { font-size: 26px; line-height: 32px; font-weight: 700; margin: 0; }
+@media (max-width: 640px) {
+  .estimates { grid-template-columns: 1fr; }
+  .form { grid-template-columns: 1fr; }
+  .signalRow { grid-template-columns: 1fr; }
+  .big { font-size: 22px; line-height: 28px; }
+}
+.liveRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0; }
+.liveBadge { font-size: 11px; font-weight: 700; letter-spacing: .06em; padding: 2px 6px; border-radius: var(--radius-sm); border: 1px solid var(--text-subtle); color: var(--text-subtle); }
+.liveOn { border-color: var(--risk-low); color: var(--risk-low); }
+.liveOn::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; margin-right: 6px; vertical-align: middle; animation: livePulse 1.6s ease-in-out infinite; }
+@keyframes livePulse { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .liveOn::before { animation: none; } }
+.hero { border-left-width: 1px; border-radius: var(--radius-md); box-shadow: var(--shadow-card); }
+.hero.buy { border-color: color-mix(in srgb, var(--risk-low) 45%, var(--border)); }
+.hero.sell { border-color: var(--risk-critical); background: color-mix(in srgb, var(--risk-critical) 9%, var(--surface-1)); }
+.hero.avoid { border-color: color-mix(in srgb, var(--risk-high) 40%, var(--border)); }
+.hero.burst { border-color: color-mix(in srgb, var(--opportunity) 45%, var(--border)); }
+.action { border-radius: var(--radius-sm); padding: 3px 8px; }
+.estimate { border-radius: var(--radius-sm); }
+.signalRow { border-radius: var(--radius-sm); box-shadow: none; transition: background .12s; }
+.estimate small b { font-size: inherit; }
+.liveRow { justify-content: space-between; }
+.panelTag { margin: 0; font-size: 13px; font-weight: 500; color: var(--text-muted); }
+.call { margin: 0; font-size: 34px; line-height: 40px; font-weight: 700; letter-spacing: -.02em; }
+.hero.sell .call { color: var(--risk-critical); }
+.hero.avoid .call { color: var(--risk-high); }
+.callWhy { margin: 0; font-size: 15px; }

@@ -497,7 +497,21 @@ class SecurityOut(Out):
     rules_version: str
 
 
+class SmartWalletsOut(Out):
+    available: bool
+    wallets: int
+    usd: float
+    known_smart: int
+    minutes: int
+
+
+class PhoneOut(Out):
+    enabled: bool
+    url: str | None
+
+
 class TokenDetail(TokenListItem):
+    smart_wallets: SmartWalletsOut | None = None
     buy_simulation: BuySimulationOut | None = None
     signal: SignalOut | None
     estimates: list[HorizonEstimateOut]
@@ -727,6 +741,15 @@ class LiveFeedOut(Out):
     rules_version: str
 
 
+class FlowOut(Out):
+    """Compras e vendas dos últimos 30 s (só pump.fun e PumpSwap)."""
+
+    buy_usd: float
+    sell_usd: float
+    buys: int
+    sells: int
+
+
 class ExitPlanOut(Out):
     version: str
     urgency: Literal["sell_now", "reduce", "hold", "no_data"]
@@ -744,6 +767,7 @@ class ExitPlanOut(Out):
     has_position: bool
     freshness: Freshness
     live: LiveFeedOut
+    flow: FlowOut | None = None
     generated_at: UTCdt
     disclaimer: str
 

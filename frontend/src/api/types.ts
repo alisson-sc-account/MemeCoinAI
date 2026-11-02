@@ -29,6 +29,7 @@ export type Page<T> = { items: T[]; total: number; page: number; page_size: numb
 export type ApiErrorBody = { error?: { code?: string; message?: string; details?: unknown } }
 export type AccuracyPage = Schemas['AccuracyPage']
 export type Favorite = Schemas['FavoriteOut']
+export type Phone = Schemas['PhoneOut']
 export type AgentStatus = Schemas['AgentStatusOut']
 export type Security = Schemas['SecurityOut']
 export type BuySimulation = Schemas['BuySimulationOut']

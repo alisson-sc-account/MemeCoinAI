@@ -4,11 +4,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, apiClient } from '../api/client'
 import type { Advice, Alert, HorizonEstimate, Position, Signal } from '../api/types'
 import { price, relativeTime, shortAddress, usd } from '../lib/format'
+import { ageText } from '../lib/format'
 import { readCenterAlerts, wantsSignal, writeCenterAlerts, type CenterAlerts } from './alertPrefs'
 import styles from './signals.module.css'
 import { playAlertSound, setSoundEnabled, soundEnabled } from './sound'
 
 export const REFRESH_MS = 30_000
+export const ALERT_POLL_MS = 3_000  // alerta chega em ~3 s depois de detectado
 
 const ACTION_LABEL: Record<string, string> = { buy: 'COMPRAR', sell: 'VENDER', avoid: 'EVITAR', hold: 'AGUARDAR', burst: 'DISPARO AGORA' }
 const HORIZON_LABEL: Record<string, string> = { '15m': 'Em 15 min', '1h': 'Em 1 hora', '6h': 'Em 6 horas' }
@@ -46,7 +48,7 @@ export function SignalHero({ signal, estimates }: { signal: Signal | null | unde
   return <section className={`${styles.hero} ${styles[signal.action] ?? ''}`} aria-label="Sinal atual">
     <div className={styles.heroTop}><ActionBadge action={signal.action} strength={signal.strength} /><h2 className={styles.headline}>{signal.headline}</h2></div>
     {signal.reasons.length > 0 && <ul className={styles.reasons}>{signal.reasons.map(r => <li key={r}>{r}</li>)}</ul>}
-    <Estimates estimates={estimates} />
+    <details><summary className={styles.meta}>Ver o que aconteceu com moedas parecidas</summary><Estimates estimates={estimates} /></details>
     <small className={styles.meta}>Risco {signal.risk_score.toFixed(0)}/100 · oportunidade {signal.opportunity_score.toFixed(0)}/100 · sinal desde {relativeTime(signal.created_at)}, confirmado {relativeTime(signal.last_confirmed_at)} · regras {signal.rules_version}</small>
   </section>
 }
@@ -127,7 +129,7 @@ function useBurstWatch(username: string, navigate: (to: string) => void, enabled
   const read = useCallback(() => readSeen(`mcai-last-burst-${username}`), [username])
   const write = useCallback((id: number) => writeSeen(`mcai-last-burst-${username}`, id), [username])
   const [lastSeen, setLastSeen] = useState<number | null>(read)
-  const q = useQuery({ queryKey: ['alerts', 'burst', 'watch'], queryFn: () => apiClient.alerts('alert_type=pump_burst&status=open&page_size=10'), refetchInterval: REFRESH_MS, refetchIntervalInBackground: true })
+  const q = useQuery({ queryKey: ['alerts', 'burst', 'watch'], queryFn: () => apiClient.alerts('alert_type=pump_burst&status=open&page_size=10'), refetchInterval: ALERT_POLL_MS, refetchIntervalInBackground: true })
   const items = useMemo(() => (q.data?.items ?? []).filter(a => a.alert_type === 'pump_burst'), [q.data])
   const maxId = items.reduce((m, a) => Math.max(m, a.id), 0)
   useEffect(() => { if (q.data && lastSeen == null) { setLastSeen(maxId); write(maxId) } }, [q.data, lastSeen, maxId, write])
@@ -147,6 +149,7 @@ function useBurstWatch(username: string, navigate: (to: string) => void, enabled
     <div className={`${styles.modal} ${styles.burst}`} role="alertdialog" aria-modal="true" aria-labelledby="burst-title" onClick={e => e.stopPropagation()}>
       <ActionBadge action="burst" />
       <p id="burst-title" className={styles.big}>{top.title}</p>
+      <p className={styles.meta}>Detectado {ageText(top.detected_at, Date.now())}</p>
       <p><b>{top.token?.symbol || top.token?.name || 'Token'}</b> {top.token && <span className={styles.meta}>{shortAddress(top.token.address)}</span>}</p>
       <ul className={styles.reasons}>{top.reason.split('; ').map(r => <li key={r}>{r}</li>)}</ul>
       <div className={styles.stats}><small>Histórico deste padrão</small><span>{statsLine(stats)}</span></div>
@@ -230,6 +233,17 @@ const CENTER_OPTIONS: { key: keyof CenterAlerts; label: string; hint: string }[]
   { key: 'sell', label: 'Venda', hint: 'Desligado: a venda aparece dentro da moeda' },
 ]
 
+export function PhoneSettings() {
+  const q = useQuery({ queryKey: ['phone'], queryFn: apiClient.phone })
+  if (q.isPending) return <p className={styles.meta}>Carregando…</p>
+  if (q.isError || !q.data.url) return <p className={styles.meta}>Aviso no celular desligado.</p>
+  return <div className={styles.list}>
+    <p>Abra este link no celular uma vez e toque em "Subscribe". Vão disparo extremo e compra forte, de graça e sem conta.</p>
+    <a href={q.data.url} target="_blank" rel="noopener noreferrer" className={styles.phoneLink}>{q.data.url}</a>
+    <p className={styles.meta}>Quem tiver este link vê os avisos. Não vai saldo nem posição. Limite de 200 avisos por dia.</p>
+  </div>
+}
+
 export function CenterAlertSettings() {
   const [prefs, setPrefs] = useState(readCenterAlerts)
   const change = (key: keyof CenterAlerts, on: boolean) => { const next = { ...prefs, [key]: on }; setPrefs(next); writeCenterAlerts(next) }
@@ -246,7 +260,7 @@ export function SignalWatcher({ username }: { username: string }) {
   const prefs = readCenterAlerts()
   const burst = useBurstWatch(username, navigate, prefs.burst)
   const [lastSeen, setLastSeen] = useState<number | null>(() => readLastSeen(username))
-  const q = useQuery({ queryKey: ['signals', 'watch'], queryFn: () => apiClient.signals('action=buy&action=sell&page_size=20'), refetchInterval: REFRESH_MS, refetchIntervalInBackground: true })
+  const q = useQuery({ queryKey: ['signals', 'watch'], queryFn: () => apiClient.signals('action=buy&action=sell&page_size=20'), refetchInterval: ALERT_POLL_MS, refetchIntervalInBackground: true })
   const relevant = (q.data?.items ?? []).filter(s => wantsSignal(prefs, s.action, s.strength))
   const maxId = relevant.reduce((m, s) => Math.max(m, s.id), 0)
   useEffect(() => {
@@ -275,6 +289,7 @@ export function SignalWatcher({ username }: { username: string }) {
     <div className={`${styles.modal} ${styles[top.action] ?? ''}`} role="alertdialog" aria-modal="true" aria-labelledby="signal-title" onClick={e => e.stopPropagation()}>
       <ActionBadge action={top.action} strength={top.strength} />
       <p id="signal-title" className={styles.big}>{buyLine(top) ?? top.headline}</p>
+      <p className={styles.meta}>Sinal emitido {ageText(top.created_at, Date.now())}</p>
       <p><b>{top.token.symbol || top.token.name || 'Token'}</b> <span className={styles.meta}>{shortAddress(top.token.address)}</span></p>
       {top.action === 'buy' && !top.allocation && <p className={styles.meta}>Informe seu saldo em Conta para ver quanto usar.</p>}
       {e1 && e1.basis !== 'insufficient' && <p>Em 1 hora, casos parecidos: típico <b>{pct(e1.end_median)}</b> (faixa {pct(e1.end_p25)} a {pct(e1.end_p75)}); chance de subir ≥ 20%: {pct(e1.p_up_20, false)}.</p>}

@@ -1,5 +1,12 @@
 # Handoff
 
+## Sessão 11 — 2026-11-01 — negociações ao vivo e saída perto do topo (D-020)
+
+- `app/tape/` (decode, book, store, processo), `app/notify.py`, `app/backup.py`, `app/supervisor.py`. `peak_call` reescrito. Mapa de bolhas removido; segurança em uma linha, com detalhes recolhidos.
+- `start.bat` abre uma janela só; logs em `backend/data/logs/`. `stop.bat` salva cópia em `backend/data/backups/`.
+- Trabalho em commits na branch `sistema-completo`; push depende do proprietário.
+
+
 ## Sessão 10 — 2026-10-30 — segurança e orquestrador (D-019)
 
 - Plano e linha de base em `docs/PROMPT_ORQUESTRADOR.md`. Regressão do disparo em `tests/test_orchestrator.py`.

@@ -21,6 +21,7 @@ from app.models import Alert, Analysis, Pair, PairSnapshot, RiskCheck, Signal, T
 log = logging.getLogger(__name__)
 
 FEATURE_LOOKBACK = timedelta(hours=2)
+TAPE_ALERT_HOLD = timedelta(minutes=15)
 # Só persiste nova análise se mudou de forma relevante ou passou este intervalo.
 MIN_PERSIST_INTERVAL = timedelta(minutes=5)
 MIN_SCORE_DELTA = 5.0
@@ -181,7 +182,13 @@ def analyze_token(db: Session, token: Token, as_of: datetime | None = None, forc
         candidates.append(sig_alert)
     for c in candidates:
         upsert_alert(db, c, token.id, pair.id if pair else None, analysis.id)
-    resolve_absent(db, token.id, {c.alert_type for c in candidates})
+    active = {c.alert_type for c in candidates}
+    # Disparo vindo das negociações ao vivo chega antes do DEX Screener: a coleta atrasada não pode fechá-lo.
+    if "pump_burst" not in active and db.scalar(select(Alert.id).where(
+            Alert.dedup_key == f"pump_burst:{token.id}", Alert.status.in_(("open", "acknowledged")), Alert.rule_id == "tape-burst-1",
+            Alert.detected_at >= as_of - TAPE_ALERT_HOLD).limit(1)):
+        active.add("pump_burst")
+    resolve_absent(db, token.id, active)
     if pair:
         maybe_create_predictions(db, token.id, pair.id, analysis, features, snap.id if snap else None)
     db.commit()

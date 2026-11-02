@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from app import __version__, agents, board
+from app import __version__, agents, board, notify
 from app.api.deps import current_user
 from app.api.views import build_list_items, token_link, token_ref
 from app.config import get_settings
@@ -15,7 +15,7 @@ from app.api.views import TARGET_DESCRIPTIONS
 from app.ingest.service import source_status
 from app.live import service as live
 from app.models import Alert, CollectorRun, Prediction, Token
-from app.schemas import AgentStatusOut, DashboardSummary, HealthOut, MetaOut, RankedToken, SourceRegistryOut, SystemSourcesOut
+from app.schemas import AgentStatusOut, DashboardSummary, PhoneOut, HealthOut, MetaOut, RankedToken, SourceRegistryOut, SystemSourcesOut
 from app.sources import dexscreener, solana_rpc
 from app.sources.registry import registry
 
@@ -63,6 +63,13 @@ def health(db: Session = Depends(get_db)):
 def system_agents(db: Session = Depends(get_db)):
     """Todos os agentes por categoria, com o estado de cada um."""
     return agents.status_list(db)
+
+
+@router.get("/system/phone", response_model=PhoneOut, dependencies=[Depends(current_user)])
+def system_phone():
+    """Link do canal de avisos no celular."""
+    on = get_settings().ntfy_enabled
+    return PhoneOut(enabled=on, url=notify.phone_url() if on else None)
 
 
 @router.get("/system/registry", response_model=list[SourceRegistryOut], dependencies=[Depends(current_user)])

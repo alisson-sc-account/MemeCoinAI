@@ -127,6 +127,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/system/phone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * System Phone
+         * @description Link do canal de avisos no celular.
+         */
+        get: operations["system_phone_api_v1_system_phone_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/system/registry": {
         parameters: {
             query?: never;
@@ -1056,6 +1076,7 @@ export interface components {
             has_position: boolean;
             freshness: components["schemas"]["Freshness"];
             live: components["schemas"]["LiveFeedOut"];
+            flow?: components["schemas"]["FlowOut"] | null;
             /** Generated At */
             generated_at: string;
             /** Disclaimer */
@@ -1191,6 +1212,20 @@ export interface components {
             worst_gain: number | null;
             /** Worst Symbol */
             worst_symbol: string | null;
+        };
+        /**
+         * FlowOut
+         * @description Compras e vendas dos últimos 30 s (só pump.fun e PumpSwap).
+         */
+        FlowOut: {
+            /** Buy Usd */
+            buy_usd: number;
+            /** Sell Usd */
+            sell_usd: number;
+            /** Buys */
+            buys: number;
+            /** Sells */
+            sells: number;
         };
         /** Freshness */
         Freshness: {
@@ -1622,6 +1657,13 @@ export interface components {
             /** Pair Created At */
             pair_created_at: string | null;
         };
+        /** PhoneOut */
+        PhoneOut: {
+            /** Enabled */
+            enabled: boolean;
+            /** Url */
+            url: string | null;
+        };
         /** PositionIn */
         PositionIn: {
             /**
@@ -1919,6 +1961,19 @@ export interface components {
             /** Definition */
             definition: string;
         };
+        /** SmartWalletsOut */
+        SmartWalletsOut: {
+            /** Available */
+            available: boolean;
+            /** Wallets */
+            wallets: number;
+            /** Usd */
+            usd: number;
+            /** Known Smart */
+            known_smart: number;
+            /** Minutes */
+            minutes: number;
+        };
         /** SourceRegistryOut */
         SourceRegistryOut: {
             /** Key */
@@ -2032,6 +2087,7 @@ export interface components {
             scores: components["schemas"]["ScoresOut"] | null;
             /** Open Alerts */
             open_alerts: number;
+            smart_wallets?: components["schemas"]["SmartWalletsOut"] | null;
             buy_simulation?: components["schemas"]["BuySimulationOut"] | null;
             signal: components["schemas"]["SignalOut"] | null;
             /** Estimates */
@@ -2353,6 +2409,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentStatusOut"][];
+                };
+            };
+        };
+    };
+    system_phone_api_v1_system_phone_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneOut"];
                 };
             };
         };

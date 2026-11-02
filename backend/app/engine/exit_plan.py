@@ -7,6 +7,7 @@ Regras fixas e explícitas (não calibradas historicamente):
   VENDER moderado ou EVITAR; senão "manter com alvos".
 - REFERÊNCIA: preço médio de compra da posição, se houver; senão o preço em que o
   sinal atual foi emitido; senão o preço atual.
+- O aviso de saída perto do topo vem de `app.live.service.peak_call`, por ter rendido mais no backtest.
 - ALVOS de realização parcial: +20% (ou a faixa alta típica de 1 h, se maior) vende
   30%; +50% vende mais 30%; +100% vende o restante.
 - STOP: −15% da referência vende tudo.

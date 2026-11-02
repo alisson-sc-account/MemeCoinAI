@@ -14,13 +14,13 @@ import time
 
 from sqlalchemy import select
 
-from app import agents
+from app import agents, notify
 from app.config import BACKEND_DIR, get_settings
 from app.db import session_factory
 from app.engine import burst, checks, outcomes
 from app.engine.pipeline import analyze_tokens, sync_source_alerts
 from app.engine.predict import evaluate_due
-from app.ingest.service import apply_raw_retention, apply_snapshot_retention, discover, prune_inactive, refresh_tracked, scout, split_hot_cold
+from app.ingest.service import apply_raw_retention, apply_snapshot_retention, compact_old_snapshots, discover, prune_inactive, refresh_tracked, scout, split_hot_cold
 from app.logging_setup import setup_logging
 from app.worker_lock import WorkerAlreadyRunning, WorkerLock
 from app.models import Token
@@ -162,6 +162,10 @@ def job_scout(db):
     return {"promoted": len(ids), "added": added}
 
 
+def job_notify(db):
+    return {"sent": notify.run_once(db)}
+
+
 def job_prune(db):
     return {"pruned": prune_inactive(db)}
 
@@ -186,7 +190,7 @@ def job_evaluate(db):
 
 
 def job_retention(db):
-    return {"raw_cleared": apply_raw_retention(db), "snapshots_removed": apply_snapshot_retention(db)}
+    return {"raw_cleared": apply_raw_retention(db), "snapshots_removed": apply_snapshot_retention(db), "compacted": compact_old_snapshots(db)}
 
 
 def main() -> None:
@@ -212,6 +216,7 @@ def _run(s) -> None:
         ("market_cold", job_market_cold, s.refresh_interval_seconds),
         ("analysis", job_analysis, ANALYSIS_PAUSE),
         ("scout", job_scout, 20),
+        ("notify", job_notify, 3),
         ("discover_lists", _discover_part("lists"), s.discovery_interval_seconds),
         ("discover_search", _discover_part("search"), s.discovery_interval_seconds),
         ("discover_gecko", _discover_part("gecko"), 90),

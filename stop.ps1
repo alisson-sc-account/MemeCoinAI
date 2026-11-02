@@ -1,12 +1,24 @@
-﻿# Encerra a API, o coletor e a atualização rápida do MemeCoinAI iniciados a partir DESTA pasta.
+﻿# Desliga o MemeCoinAI iniciado a partir DESTA pasta e salva uma cópia do banco.
 # Só considera processos Python cuja linha de comando aponta para o .venv deste projeto,
 # para nunca encerrar outros programas Python da máquina.
 $venv = Join-Path $PSScriptRoot 'backend\.venv'
-$procs = Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
-    Where-Object { $_.CommandLine -and $_.CommandLine -like "*$venv*" -and $_.CommandLine -match 'uvicorn app\.main|app\.worker|app\.live|app.safety|app.board' }
-if (-not $procs) { Write-Host 'Nenhum processo do MemeCoinAI em execução.'; exit 0 }
-foreach ($p in $procs) {
-    $kind = if ($p.CommandLine -match 'app\.worker') { 'coletor' } elseif ($p.CommandLine -match 'app\.live') { 'atualização rápida' } elseif ($p.CommandLine -match 'app.safety') { 'segurança' } elseif ($p.CommandLine -match 'app\.board') { 'painel' } else { 'API' }
-    Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
-    Write-Host "Encerrado: $kind (PID $($p.ProcessId))"
+$py = Join-Path $venv 'Scripts\python.exe'
+function Find-Project($pattern) {
+    Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
+        Where-Object { $_.CommandLine -and $_.CommandLine -like "*$venv*" -and $_.CommandLine -match $pattern }
+}
+# O supervisor sai primeiro: senão ele reabriria os outros.
+$found = $false
+foreach ($pattern in 'app\.supervisor', 'uvicorn app\.main|app\.worker|app\.live|app\.tape|app\.safety|app\.board') {
+    foreach ($p in Find-Project $pattern) {
+        $found = $true
+        Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
+        Write-Host "Encerrado: PID $($p.ProcessId)"
+    }
+}
+if (-not $found) { Write-Host 'Nenhum processo do MemeCoinAI em execução.' }
+if (Test-Path $py) {
+    Write-Host 'Salvando cópia do banco...'
+    Push-Location (Join-Path $PSScriptRoot 'backend')
+    try { & $py -m app.cli backup } finally { Pop-Location }
 }

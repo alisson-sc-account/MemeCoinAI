@@ -101,9 +101,9 @@ def test_hysteresis_keeps_buy_on_small_drop():
 def test_cost_policy_only_class_a_enabled():
     assert validate_policy() == []
     enabled = {s.key for s in SOURCES if s.enabled}
-    assert enabled == {"dexscreener", "solana_rpc", "jupiter_price", "geckoterminal", "solana_pool", "jupiter_tokens", "rugcheck_security", "publicnode_rpc"}  # jupiter_price: atualização rápida
+    assert enabled == {"dexscreener", "solana_rpc", "jupiter_price", "geckoterminal", "solana_pool", "jupiter_tokens", "rugcheck_security", "publicnode_rpc", "solana_logs", "ntfy"}  # jupiter_price: atualização rápida
     assert all(not s.needs_key for s in SOURCES if s.enabled)  # inicia sem nenhuma chave
-    assert len(SOURCES) == 41  # as 36 do fluxograma + as 5 das pistas rápidas, descoberta e segurança
+    assert len(SOURCES) == 43  # as 36 do fluxograma + as 7 das pistas rápidas, descoberta e segurança
 
 
 def test_conditional_sources_record_real_verification():
@@ -143,7 +143,7 @@ def test_health_reports_worker_state(client, db):
 
 def test_registry_endpoint(auth_client):
     r = auth_client.get(f"{API}/system/registry").json()
-    assert len(r) == 41 and {x["access_class"] for x in r} <= {"A", "B", "C", "D"}
+    assert len(r) == 43 and {x["access_class"] for x in r} <= {"A", "B", "C", "D"}
     assert next(x for x in r if x["key"] == "birdeye")["enabled"] is False
 
 

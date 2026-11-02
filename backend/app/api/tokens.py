@@ -28,6 +28,7 @@ from app.ingest.normalize import normalize_address
 from app.ingest.service import source_status, track_token
 from app.live import service as live
 from app.safety import service as security
+from app.tape import store as tape_store
 from app.models import Alert, Analysis, Pair, PairSnapshot, Position, Prediction, SecurityReport, Signal, Token, User
 from app.schemas import (
     BuySimulationOut,
@@ -64,6 +65,7 @@ SORT_FIELDS = {
     "observed_at": lambda i: i.freshness.observed_at,
 }
 
+PEAK_REFERENCE_AGE = timedelta(hours=6)
 RANGES = {"1h": timedelta(hours=1), "6h": timedelta(hours=6), "24h": timedelta(hours=24), "7d": timedelta(days=7)}
 
 
@@ -225,6 +227,7 @@ def token_detail(chain_id: str, address: str, db: Session = Depends(get_db), use
                          .order_by(Signal.created_at.desc()).limit(1))
     return TokenDetail(
         **base.model_dump(),
+        smart_wallets=tape_store.smart_activity(t.id),
         buy_simulation=BuySimulationOut(signal_id=last_buy.id, signal_at=last_buy.created_at, entry_price_usd=last_buy.reference_price_usd,
                                         strength=last_buy.strength) if last_buy else None,
         signal=signal_out(sig, t, user) if sig else None, estimates=estimates,
@@ -262,6 +265,7 @@ def token_exit_plan(chain_id: str, address: str, db: Session = Depends(get_db), 
     except OperationalError:
         db.rollback()  # banco ocupado: o pedido entra na próxima consulta, o plano sai mesmo assim
     feed = live.feed(db, t)
+    flow = tape_store.read_flow(t.id)
     src = source_status(db, dexscreener.SOURCE_NAME)["status"]
     snap = latest_snapshots(db, [t.primary_pair_id]).get(t.primary_pair_id) if t.primary_pair_id else None
     a = db.scalar(select(Analysis).where(Analysis.token_id == t.id).order_by(Analysis.computed_at.desc()).limit(1))
@@ -270,13 +274,16 @@ def token_exit_plan(chain_id: str, address: str, db: Session = Depends(get_db), 
     if feed["status"] == "live":
         price, observed = feed["price_usd"], freshness(feed["observed_at"], "ok")
         observed.source = feed["source"]
-        alerts, peak = live.live_alerts(db, t.id), live.peak_call(db, t.id)
+        last_buy = db.scalar(select(Signal.reference_price_usd).where(Signal.token_id == t.id, Signal.action == "buy", Signal.reference_price_usd.is_not(None),
+                                                                      Signal.created_at >= utcnow() - PEAK_REFERENCE_AGE).order_by(Signal.created_at.desc()).limit(1))
+        reference = (pos.entry_price_usd if pos else None) or last_buy
+        alerts, peak = live.live_alerts(db, t.id), live.peak_call(db, t.id, reference, flow)
     else:
         price, observed, alerts, peak = (snap.price_usd if snap else None), freshness(snap.received_at if snap else None, src), [], None
     estimates = outcomes.estimate(db, a.opportunity_score, a.risk_score) if a else []
     adv = advise(sig, pos, price, None, user)
     plan = exit_plan.build(price, snap.liquidity_usd if snap else None, a, sig, pos, estimates, adv, alerts, peak)
-    return ExitPlanOut(**plan, has_position=pos is not None, freshness=observed, live=feed, generated_at=utcnow())
+    return ExitPlanOut(**plan, has_position=pos is not None, freshness=observed, live=feed, flow=flow, generated_at=utcnow())
 
 
 @router.get("/{chain_id}/{address}/security", response_model=SecurityOut)

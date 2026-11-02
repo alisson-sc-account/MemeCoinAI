@@ -260,19 +260,28 @@ def test_feed_prefers_one_second_source(db, fake_dex):
     assert f["interval_seconds"] == 1 and f["price_usd"] == 0.6 and f["source"] == "solana_pool"
 
 
-def test_peak_call_sells_half_then_all(db, fake_dex):
+def test_peak_call_needs_gain_then_fall(db, fake_dex):
     token, _ = track_token(db, "solana", SOL_MINT)
-    for ago, p in ((60, 1.0), (50, 1.0), (40, 0.98), (30, 0.97)):
+    for ago, p in ((60, 1.0), (50, 1.15), (40, 1.2)):
         _quote(db, token, ago, p, 1000)
-    assert live.peak_call(db, token.id) is None
-    _quote(db, token, 20, 0.9, 1000)
-    _quote(db, token, 10, 0.9, 1000)
-    assert live.peak_call(db, token.id)[0] == 50
-    _quote(db, token, 5, 0.8, 1000)
-    assert live.peak_call(db, token.id)[0] == 50  # uma leitura só não basta
-    _quote(db, token, 2, 0.8, 1000)
-    call = live.peak_call(db, token.id)
-    assert call[0] == 100 and "20%" in call[1]
+    assert live.peak_call(db, token.id, reference=1.0) is None
+    _quote(db, token, 20, 1.08, 1000)
+    assert live.peak_call(db, token.id, reference=1.0) is None  # uma leitura só não basta
+    _quote(db, token, 10, 1.08, 1000)
+    call = live.peak_call(db, token.id, reference=1.0)
+    assert call[0] == 100 and "topo" in call[1]
+    assert live.peak_call(db, token.id, reference=1.15) is None  # sem ter subido 10% ainda não armou
+
+
+def test_peak_call_warns_near_top_when_sellers_take_over(db, fake_dex):
+    token, _ = track_token(db, "solana", SOL_MINT)
+    for ago, p in ((40, 1.25), (30, 1.3), (20, 1.3), (10, 1.29)):
+        _quote(db, token, ago, p, 1000)
+    sellers = {"buy_usd": 100.0, "sell_usd": 200.0, "buys": 3, "sells": 5}
+    assert live.peak_call(db, token.id, 1.0, sellers)[0] == 50
+    assert live.peak_call(db, token.id, 1.0, {**sellers, "sell_usd": 120.0}) is None  # compradores ainda seguram
+    assert live.peak_call(db, token.id, 1.0, {**sellers, "buys": 1, "sells": 2}) is None  # poucas negociações
+    assert live.peak_call(db, token.id, 1.0) is None  # sem fluxo não avisa
 
 
 def test_exit_plan_uses_peak_call():

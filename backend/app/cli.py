@@ -117,6 +117,13 @@ def cmd_retention(args):
         print("payloads brutos antigos removidos (dados normalizados preservados)")
 
 
+def cmd_backup(_args):
+    from app.backup import make_backup
+
+    path = make_backup()
+    print(f"Cópia do banco salva em {path.name}" if path else "Banco não é SQLite: nada a copiar.")
+
+
 def cmd_openapi(_args):
     from app.main import create_app
 
@@ -129,7 +136,7 @@ def cmd_openapi(_args):
 COMMANDS = {
     "openapi": cmd_openapi,
     "migrate": cmd_migrate, "seed-users": cmd_seed_users, "track": cmd_track, "discover": cmd_discover,
-    "refresh": cmd_refresh, "checks": cmd_checks, "evaluate": cmd_evaluate, "retention": cmd_retention,
+    "refresh": cmd_refresh, "checks": cmd_checks, "evaluate": cmd_evaluate, "retention": cmd_retention, "backup": cmd_backup,
 }
 
 

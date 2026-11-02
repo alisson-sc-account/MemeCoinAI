@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 
-from sqlalchemy import delete, func, null, select, update
+from sqlalchemy import delete, func, null, select, text, update
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -168,6 +168,7 @@ def ingest_pairs(
     return touched
 
 
+COMPACT_AFTER_DAYS = 15
 NEW_TOKENS_PER_CYCLE = 300  # novatos em massa não podem empurrar as moedas quentes para fora
 
 
@@ -462,6 +463,24 @@ def apply_snapshot_retention(db: Session, batch: int = 5000) -> int:
     total = 0
     while True:
         ids = db.scalars(select(PairSnapshot.id).where(PairSnapshot.received_at < cut, PairSnapshot.pair_id.not_in(keep_pairs)).limit(batch)).all()
+        if not ids:
+            return total
+        db.execute(delete(PairSnapshot).where(PairSnapshot.id.in_(ids)))
+        db.commit()
+        total += len(ids)
+
+
+def compact_old_snapshots(db: Session, batch: int = 5000) -> int:
+    """Depois de 15 dias guarda 1 foto a cada 10 min: mais meses de histórico no mesmo disco."""
+    if db.get_bind().dialect.name != "sqlite":
+        return 0
+    cut = utcnow() - timedelta(days=COMPACT_AFTER_DAYS)
+    params = {"cut": cut.strftime("%Y-%m-%d %H:%M:%S"), "floor": (cut - timedelta(days=2)).strftime("%Y-%m-%d %H:%M:%S"), "n": batch}
+    total = 0
+    while True:
+        ids = db.scalars(text(
+            """SELECT id FROM (SELECT id, ROW_NUMBER() OVER (PARTITION BY pair_id, CAST(strftime('%s', received_at) AS INTEGER) / 600 ORDER BY received_at) AS rn
+               FROM pair_snapshots WHERE received_at < :cut AND received_at >= :floor) WHERE rn > 1 LIMIT :n"""), params).all()
         if not ids:
             return total
         db.execute(delete(PairSnapshot).where(PairSnapshot.id.in_(ids)))

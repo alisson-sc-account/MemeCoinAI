@@ -84,6 +84,8 @@ class Settings(BaseSettings):
     solana_history_rpc_url: str = "https://solana-rpc.publicnode.com"  # só ~63 h de histórico: triagem de carteiras
     rugcheck_base_url: str = "https://api.rugcheck.xyz/v1"
     board_enabled: bool = True  # listas prontas em data/board.db (python -m app.board)
+    ntfy_base_url: str = "https://ntfy.sh"
+    ntfy_enabled: bool = True  # aviso no celular, grátis e sem conta (app/notify.py)
     security_gate: bool = True  # compra forte exige verificação de segurança limpa
     jupiter_price_base_url: str = "https://lite-api.jup.ag"
     solana_rpc_url: str = "https://api.mainnet-beta.solana.com"
@@ -96,7 +98,7 @@ class Settings(BaseSettings):
     # Retenção
     raw_payload_retention_days: int = 1  # aplicada sozinha pelo worker
     store_raw_payload: bool = False  # com 10 mil tokens o bruto custaria ~17 GB/dia
-    snapshot_retention_days: int = 15  # aplicada sozinha; cobre os 14 dias da aba Acertos
+    snapshot_retention_days: int = 180  # mais histórico; depois de 15 dias fica 1 foto a cada 10 min
 
     # Fonte considerada indisponível após N falhas consecutivas
     source_failure_threshold: int = 3

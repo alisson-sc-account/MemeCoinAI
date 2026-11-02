@@ -74,6 +74,18 @@ Formato: problema · decisão · alternativas · justificativa · consequências
 ## D-015 Atualização a cada 30 s
 - Coletor e interface passam de 60 s para 30 s. A fonte tem cache de ~60 s, então parte das coletas repete dados (deduplicados); o ganho é ver a mudança até 30 s antes, sem custo adicional (bem abaixo do limite de 300 req/min).
 
+## D-020 Negociações ao vivo, saída perto do topo e sistema local robusto (proprietário, 2026-11-01)
+- **Requisitos:** tudo grátis, nada manual, roda local. Criar contas não é algo que este projeto faça pelo proprietário.
+- **Negociações ao vivo (`app/tape`):** WebSocket público da Solana (`logsSubscribe`), sem chave, ~700 eventos/s de pump.fun e PumpSwap. Aplica a mesma função `burst.detect` nos 5 min reais. Volume de 1 h e liquidez vêm da coleta. Banco próprio (`data/tape.db`).
+- **Atraso medido antes:** ao detectar, a moeda já tinha subido +12,5% (mediana) sobre o mínimo de 10 min; a interface ainda levava até 30 s para perguntar. Interface agora pergunta a cada 3 s.
+- **Saída:** backtest em 601 disparos, 3% de custo, entrada 30 s depois: escada 20/50/100 = +3,2% de média; armar em +10% e sair ao cair 8% do topo = +23,6%; medianas de -3,1% e -3,0%, com ganhos limitados a +500%. Virou a regra principal. Vendedores superando compradores perto do topo gera aviso de 50%: limiar sem teste, porque o fluxo só existe a partir de agora.
+- **Carteiras que acertam:** pontuadas pelas negociações observadas. Só informação de apoio: precisa de dias para ter dados.
+- **Celular:** ntfy.sh, sem conta. Telegram exigiria o proprietário criar um bot. Exige abrir o link uma vez.
+- **Rejeitados, com motivo:** PostgreSQL (instalar é manual, e não houve erro de banco medido; o fluxo pesado foi para banco separado); servidor na nuvem (exige conta; o proprietário definiu rodar local); chave Helius (exige conta).
+- **Idade de carteiras:** segue limitada: nenhum RPC grátis sem chave testado entregou histórico completo.
+- **Sistema de pé:** `app/supervisor.py` numa janela só, reinicia o que cair e o coletor travado. `app/backup.py` copia o banco ao desligar, ao ligar se antiga e a cada 6 h; guarda 5.
+- **Histórico:** 180 dias; depois de 15 dias, 1 foto a cada 10 min.
+
 ## D-019 Segurança das moedas e orquestrador de agentes (proprietário, 2026-10-30)
 - **Segurança (`app/safety`, `sec-1`):** processo próprio. RugCheck (liquidez travada, donos sem a pool, insiders), carteiras novas (triagem no publicnode, ~63 h de histórico; confirmação no RPC oficial, muito limitado), atividade artificial, liquidez x valor, nome que imita algo oficial. Nunca diz "seguro": "Sem alertas" ou "Sem dados". Perigo bloqueia compra; compra forte exige verificação limpa. Marca de golpe é permanente. Bubblemaps fora: API pública sem mapa, oficial paga; mapa próprio no quadro da moeda.
 - **Orquestrador (`app/worker.py`, `app/agents.py`):** agentes por categoria em threads. Coleta separada da análise por fila com prioridade. Radar promove quem aparece em "mais negociados agora" por 15 min. Painel em processo próprio (`app/board.py`, `data/board.db`).

@@ -228,6 +228,28 @@
         }
       }
     },
+    "/api/v1/system/phone": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "System Phone",
+        "description": "Link do canal de avisos no celular.",
+        "operationId": "system_phone_api_v1_system_phone_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhoneOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/system/registry": {
       "get": {
         "tags": [
@@ -3532,6 +3554,16 @@
           "live": {
             "$ref": "#/components/schemas/LiveFeedOut"
           },
+          "flow": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FlowOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "generated_at": {
             "type": "string",
             "title": "Generated At"
@@ -4011,6 +4043,35 @@
           "worst_symbol"
         ],
         "title": "FavoriteSummary"
+      },
+      "FlowOut": {
+        "properties": {
+          "buy_usd": {
+            "type": "number",
+            "title": "Buy Usd"
+          },
+          "sell_usd": {
+            "type": "number",
+            "title": "Sell Usd"
+          },
+          "buys": {
+            "type": "integer",
+            "title": "Buys"
+          },
+          "sells": {
+            "type": "integer",
+            "title": "Sells"
+          }
+        },
+        "type": "object",
+        "required": [
+          "buy_usd",
+          "sell_usd",
+          "buys",
+          "sells"
+        ],
+        "title": "FlowOut",
+        "description": "Compras e vendas dos últimos 30 s (só pump.fun e PumpSwap)."
       },
       "Freshness": {
         "properties": {
@@ -5578,6 +5639,31 @@
         ],
         "title": "PairOut"
       },
+      "PhoneOut": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled",
+          "url"
+        ],
+        "title": "PhoneOut"
+      },
       "PositionIn": {
         "properties": {
           "quantity": {
@@ -6504,6 +6590,39 @@
         ],
         "title": "SignalPerformanceOut"
       },
+      "SmartWalletsOut": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "wallets": {
+            "type": "integer",
+            "title": "Wallets"
+          },
+          "usd": {
+            "type": "number",
+            "title": "Usd"
+          },
+          "known_smart": {
+            "type": "integer",
+            "title": "Known Smart"
+          },
+          "minutes": {
+            "type": "integer",
+            "title": "Minutes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "available",
+          "wallets",
+          "usd",
+          "known_smart",
+          "minutes"
+        ],
+        "title": "SmartWalletsOut"
+      },
       "SourceRegistryOut": {
         "properties": {
           "key": {
@@ -6873,6 +6992,16 @@
           "open_alerts": {
             "type": "integer",
             "title": "Open Alerts"
+          },
+          "smart_wallets": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SmartWalletsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "buy_simulation": {
             "anyOf": [

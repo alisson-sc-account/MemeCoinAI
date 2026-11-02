@@ -249,6 +249,6 @@ def test_snapshot_retention_keeps_recent(db, fake_dex):
 
     track_token(db, "solana", SOL_MINT)
     assert apply_snapshot_retention(db) == 0
-    db.query(PairSnapshot).one().received_at = utcnow() - timedelta(days=30)
+    db.query(PairSnapshot).one().received_at = utcnow() - timedelta(days=200)
     db.commit()
     assert apply_snapshot_retention(db) == 1 and db.query(PairSnapshot).count() == 0

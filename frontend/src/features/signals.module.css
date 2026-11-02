@@ -74,3 +74,5 @@
 .hero.sell .call { color: var(--risk-critical); }
 .hero.avoid .call { color: var(--risk-high); }
 .callWhy { margin: 0; font-size: 15px; }
+.phoneLink { overflow-wrap: anywhere; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; text-decoration: underline; }
+.flowLine { margin: 0; font-size: 13px; color: var(--text-muted); }

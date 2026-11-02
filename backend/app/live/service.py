@@ -30,7 +30,8 @@ CHAIN = "solana"
 WATCH_WRITE_EVERY = timedelta(seconds=2)  # o quadro consulta a cada 1 s; 2 s bastam para saber que segue aberto
 LIQ_WINDOW, LIQ_LEFT = timedelta(minutes=15), 0.40
 PRICE_WINDOW, PRICE_LEFT = timedelta(minutes=5), 0.60
-PEAK_SELL_ALL, PEAK_SELL_HALF = 0.15, 0.08  # queda desde o topo dos últimos 15 min
+PEAK_ARM, PEAK_SELL_ALL = 0.10, 0.08  # arma com +10% e vende ao cair 8% do topo
+FADE_MIN_GAIN, FADE_NEAR_TOP, FADE_MIN_TRADES, FADE_SELL_RATIO = 0.20, 0.05, 6, 1.5
 
 
 # ---------------- Lista de acompanhamento ----------------
@@ -228,18 +229,28 @@ def _same_source(quotes: list[LiveQuote]) -> list[LiveQuote]:
     return [q for q in quotes if q.source == quotes[-1].source] if quotes else []
 
 
-def peak_call(db: Session, token_id: int, now: datetime | None = None) -> tuple[int, str] | None:
-    """Queda desde o topo recente, em 2 leituras seguidas: (percentual a vender, motivo)."""
+def peak_call(db: Session, token_id: int, reference: float | None = None, flow: dict | None = None, now: datetime | None = None) -> tuple[int, str] | None:
+    """Saída perto do topo: (percentual a vender, motivo).
+
+    Backtest em 601 disparos, com 3% de custo: sair ao cair 8% do topo depois de subir 10% rendeu +23,6% de
+    média, contra +3,2% da escada de alvos (mediana de -3,0% e -3,1%: poucas moedas puxam o ganho).
+    1. Subiu 10% ou mais e caiu 8% do topo, em 2 leituras seguidas: vender tudo.
+    2. Subiu 20% ou mais, ainda perto do topo, e vendas superam compras em 1,5x nos últimos 30 s: vender 50%.
+       É o aviso antes da queda. Limiar não testado: o fluxo só existe a partir de agora.
+    """
     now = now or utcnow()
     quotes = _same_source(_recent(db, token_id, now - LIQ_WINDOW))
     if len(quotes) < 3:
         return None
-    top = max(quotes[:-2], key=lambda q: q.price_usd).price_usd
-    drop = 1 - max(q.price_usd for q in quotes[-2:]) / top
-    if drop >= PEAK_SELL_ALL:
-        return 100, f"Caiu {drop * 100:.0f}% desde o topo"
-    if drop >= PEAK_SELL_HALF:
-        return 50, f"Começou a cair: {drop * 100:.0f}% desde o topo"
+    base = reference or quotes[0].price_usd
+    top = max(q.price_usd for q in quotes[:-2])
+    price = max(q.price_usd for q in quotes[-2:])
+    drop = 1 - price / top
+    if top >= base * (1 + PEAK_ARM) and drop >= PEAK_SELL_ALL:
+        return 100, f"Subiu {(top / base - 1) * 100:.0f}% e já caiu {drop * 100:.0f}% do topo"
+    if (flow and price >= base * (1 + FADE_MIN_GAIN) and drop < FADE_NEAR_TOP and flow["buys"] + flow["sells"] >= FADE_MIN_TRADES
+            and flow["sell_usd"] >= flow["buy_usd"] * FADE_SELL_RATIO):
+        return 50, f"Subiu {(price / base - 1) * 100:.0f}% e os vendedores estão superando os compradores"
     return None
 
 

@@ -87,6 +87,7 @@ def isolated_db(tmp_path, monkeypatch):
     monkeypatch.setenv("CHAINS", "solana")
     monkeypatch.setenv("MAX_TRACKED_TOKENS", "600")
     monkeypatch.setenv("LIST_CACHE_SECONDS", "0")
+    monkeypatch.setenv("NTFY_ENABLED", "false")  # teste nunca manda aviso de verdade
     monkeypatch.setenv("BOARD_ENABLED", "false")  # teste calcula na requisição; o painel tem teste próprio
     monkeypatch.setenv("SECURITY_GATE", "false")  # só o teste da trava liga
     monkeypatch.setenv("FRESH_MAX_AGE_SECONDS", "180")
@@ -117,6 +118,9 @@ def isolated_db(tmp_path, monkeypatch):
     from app.sources.http import FetchResult
 
     checks._holders_paused_until = 0.0
+    from app.tape import store as tape_store
+
+    monkeypatch.setattr(tape_store, "tape_path", lambda: tmp_path / "tape.db")
 
     class _NoGecko:  # teste nunca chama rede; a descoberta pelo GeckoTerminal tem teste próprio
         def pools(self, *_):

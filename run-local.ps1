@@ -57,23 +57,7 @@ if ($busy) {
 
 if ($NoStart) { Step 'Preparação concluída (-NoStart: nada foi iniciado)'; exit 0 }
 
-# 6. Coletor contínuo numa janela própria (feche a janela para parar)
-Step 'Iniciando o coletor (nova janela)'
-Start-Process powershell -WorkingDirectory $backend -ArgumentList '-NoExit', '-Command', "& '$py' -m app.worker"
-
-# 7. Atualização rápida (preço a cada 10 s no quadro "Quando vender") numa janela própria
-Step 'Iniciando a atualização rápida (nova janela)'
-Start-Process powershell -WorkingDirectory $backend -ArgumentList '-NoExit', '-Command', "& '$py' -m app.live"
-
-# Segurança das moedas (rug pull, carteiras novas, mapa de carteiras) numa janela própria
-Step 'Iniciando a verificação de segurança (nova janela)'
-Start-Process powershell -WorkingDirectory $backend -ArgumentList '-NoExit', '-Command', "& '$py' -m app.safety"
-
-# Listas do site prontas em segundo plano
-Step 'Iniciando o painel (nova janela)'
-Start-Process powershell -WorkingDirectory $backend -ArgumentList '-NoExit', '-Command', "& '$py' -m app.board"
-
-# 8. API + interface nesta janela (Ctrl+C para parar)
+# 6. Tudo numa janela só: reinicia o que cair e salva o banco ao desligar (Ctrl+C ou stop.bat)
 Step "Abra http://127.0.0.1:$Port no navegador"
 Push-Location $backend
-try { & $py -m uvicorn app.main:app --host 127.0.0.1 --port $Port } finally { Pop-Location }
+try { & $py -m app.supervisor --port $Port } finally { Pop-Location }

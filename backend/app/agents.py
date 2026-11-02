@@ -30,6 +30,8 @@ REGISTRY = (
     AgentInfo("discover_search", "Descoberta", "Buscas por termos", "DEX Screener", "worker"),
     AgentInfo("discover_gecko", "Descoberta", "Pools novas e em alta", "GeckoTerminal", "worker"),
     AgentInfo("discover_jupiter", "Descoberta", "Mais negociados e recém-criados", "Jupiter", "worker"),
+    AgentInfo("tape", "Tempo real", "Cada negociação de pump.fun e PumpSwap: disparo sem atraso e carteiras", "Solana ao vivo", "tape"),
+    AgentInfo("notify", "Avisos", "Manda disparo extremo e compra forte para o celular", "ntfy.sh", "worker"),
     AgentInfo("analysis", "Análise", "Score, sinais e disparo, moedas quentes primeiro", "banco local", "worker"),
     AgentInfo("checks", "Segurança", "Autoridades do contrato", "RPC Solana", "worker"),
     AgentInfo("security", "Segurança", "Liquidez travada, donos, insiders e carteiras novas", "RugCheck, RPC", "safety"),

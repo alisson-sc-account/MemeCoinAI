@@ -64,6 +64,7 @@ export function SellPlanPanel({ chainId, address, plan, pending, error, sharedQu
     </div>
     <p className={styles.call}>{todo.title}</p>
     <p className={styles.callWhy}>{todo.detail}</p>
+    {p.flow && <p className={styles.flowLine}>Últimos 30 s: <b className={styles.up}>{p.flow.buys} compras</b> · <b className={styles.down}>{p.flow.sells} vendas</b></p>}
     <p className={stale ? styles.error : styles.meta} aria-live="polite">
       Atualizado {ageText(p.freshness.observed_at, now)}{live.status === 'live' ? ` · preço a cada ${live.interval_seconds} s` : ` · ${live.note}`} · preço {price(p.current_price_usd)}
     </p>

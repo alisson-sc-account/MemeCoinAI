@@ -126,8 +126,14 @@ def risk_bucket(score: float) -> int:
 _cache: dict[tuple, tuple[float, list]] = {}
 
 
+def _bucket(at: datetime) -> datetime:
+    """Rótulos valem por 10 min. O corte usa o início do período: nunca enxerga o futuro."""
+    return at.replace(minute=at.minute - at.minute % 10, second=0, microsecond=0)
+
+
 def _samples(db: Session, secs: int, as_of: datetime) -> list[tuple[float, float, float, float, float]]:
-    key = (secs, as_of.replace(second=0, microsecond=0))
+    as_of = _bucket(as_of)
+    key = (secs, as_of)
     hit = _cache.get(key)
     if hit and time.monotonic() - hit[0] < _CACHE_TTL:
         return hit[1]
@@ -182,9 +188,9 @@ def estimate(db: Session, opportunity_score: float, risk_score: float, as_of: da
     """Estimativas por horizonte. `basis`: similar | general | insufficient."""
     as_of = as_of or utcnow()
     ob, rb = opportunity_bucket(opportunity_score), risk_bucket(risk_score)
-    # Mesmo minuto e mesma faixa = mesmos rótulos e mesmo resultado: varrer tudo a cada moeda
+    # Mesmo período e mesma faixa = mesmos rótulos e mesmo resultado: varrer tudo a cada moeda
     # consumia 70% do tempo da análise e atrasava o disparo.
-    memo_key = ("estimate", as_of.replace(second=0, microsecond=0), ob, rb)
+    memo_key = ("estimate", _bucket(as_of), ob, rb)
     hit = _cache.get(memo_key)
     if hit and time.monotonic() - hit[0] < _CACHE_TTL:
         return [dict(e) for e in hit[1]]

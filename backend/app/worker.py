@@ -125,6 +125,14 @@ _queue = AnalysisQueue()
 _radar = Radar()
 _scout_turn = itertools.count()
 _cold_ids: set[int] = set()
+_hot_busy = threading.Event()
+
+
+def _yield_to_hot() -> None:
+    """Todos dividem o limite do DEX Screener: a fria espera enquanto a quente busca, para o disparo não atrasar."""
+    deadline = time.monotonic() + 60
+    while _hot_busy.is_set() and time.monotonic() < deadline:
+        time.sleep(0.2)
 
 
 def job_market_hot(db):
@@ -132,7 +140,11 @@ def job_market_hot(db):
     hot, cold = split_hot_cold(db, _radar.active())
     budget = get_settings().refresh_cold_requests_per_cycle * MAX_ADDRESSES_PER_REQUEST
     _cold_ids = {t.id for t in cold[:budget]}  # o agente frio pega a mesma fatia, sem repetir as quentes
-    touched = refresh_tracked(db, tokens=hot)
+    _hot_busy.set()
+    try:
+        touched = refresh_tracked(db, tokens=hot)
+    finally:
+        _hot_busy.clear()
     _queue.add(touched, hot=True)
     sync_source_alerts(db, (dexscreener.SOURCE_NAME,))
     return {"tokens": len(hot), "new_data": len(touched)}
@@ -141,7 +153,7 @@ def job_market_hot(db):
 def job_market_cold(db):
     ids = _cold_ids
     tokens = list(db.scalars(select(Token).where(Token.id.in_(ids)))) if ids else []
-    touched = refresh_tracked(db, tokens=tokens, job="refresh_cold")
+    touched = refresh_tracked(db, tokens=tokens, job="refresh_cold", pace=_yield_to_hot)
     _queue.add(touched, hot=False)
     return {"tokens": len(tokens), "new_data": len(touched)}
 

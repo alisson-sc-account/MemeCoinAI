@@ -74,6 +74,12 @@ Formato: problema · decisão · alternativas · justificativa · consequências
 ## D-015 Atualização a cada 30 s
 - Coletor e interface passam de 60 s para 30 s. A fonte tem cache de ~60 s, então parte das coletas repete dados (deduplicados); o ganho é ver a mudança até 30 s antes, sem custo adicional (bem abaixo do limite de 300 req/min).
 
+## D-021 Alerta ao vivo em observação e rodízio corrigido (2026-11-02)
+- **Medido com preço real de entrada:** Disparo ao vivo (n=22): 15 min sobe 45%, mediana -0,1%, topo em 1 h ≥ +20% em 7%. Disparo pela coleta no mesmo período (n=21): sobe 76%, mediana +11,9%, topo ≥ +20% em 60%. O ao vivo saiu do ar como alerta; segue registrado em `tape_alerts` para comparação. Religar só com amostra maior e resultado comparável (`TAPE_ALERTS_ENABLED`).
+- **Bug do rodízio:** `last_refreshed_at` só muda quando a fonte devolve dado; moeda que sumiu da fonte ficava "mais antiga" para sempre e prendia ~2100 vagas. Novo `last_checked_at`. Moeda que a fonte parou de devolver há 3 h sai da lista.
+- **Análise lenta:** rótulos recarregados a cada minuto. Agora a cada 10 min.
+- **Compra forte:** n=37 em 3 períodos, 29% a 50% sobem; não bate o Disparo. Decisão de regra pendente.
+
 ## D-020 Negociações ao vivo, saída perto do topo e sistema local robusto (proprietário, 2026-11-01)
 - **Requisitos:** tudo grátis, nada manual, roda local. Criar contas não é algo que este projeto faça pelo proprietário.
 - **Negociações ao vivo (`app/tape`):** WebSocket público da Solana (`logsSubscribe`), sem chave, ~700 eventos/s de pump.fun e PumpSwap. Aplica a mesma função `burst.detect` nos 5 min reais. Volume de 1 h e liquidez vêm da coleta. Banco próprio (`data/tape.db`).

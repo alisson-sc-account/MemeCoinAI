@@ -3,9 +3,10 @@ import logging
 from collections import defaultdict
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, func, null, select, text, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -169,6 +170,7 @@ def ingest_pairs(
 
 
 COMPACT_AFTER_DAYS = 15
+EPOCH = datetime(2000, 1, 1, tzinfo=timezone.utc)
 NEW_TOKENS_PER_CYCLE = 300  # novatos em massa não podem empurrar as moedas quentes para fora
 
 
@@ -185,8 +187,8 @@ def split_hot_cold(db: Session, boosted: set[int] | None = None) -> tuple[list[T
     chosen |= {t.id for t in new}
     rest = sorted((t for t in tokens if t.id not in chosen), key=lambda t: t.heat or 0.0, reverse=True)
     room = max(0, s.refresh_hot_tokens - len(first))
-    # Sem data (novato além da cota) conta como o mais antigo.
-    cold = sorted(rest[room:], key=lambda t: t.last_refreshed_at.timestamp() if t.last_refreshed_at else 0.0)
+    # Ordena pelo último pedido, não pela última resposta: moeda que a fonte não devolve mais prendia o rodízio.
+    cold = sorted(rest[room:], key=lambda t: (t.last_checked_at or t.last_refreshed_at or EPOCH).timestamp())
     return first + rest[:room], cold
 
 
@@ -196,7 +198,7 @@ def _refresh_selection(db: Session) -> list[Token]:
     return (hot + cold)[: s.refresh_requests_per_cycle * MAX_ADDRESSES_PER_REQUEST]
 
 
-def refresh_tracked(db: Session, client: DexScreenerClient | None = None, tokens: list[Token] | None = None, job: str = "refresh") -> set[int]:
+def refresh_tracked(db: Session, client: DexScreenerClient | None = None, tokens: list[Token] | None = None, job: str = "refresh", pace=None) -> set[int]:
     client = client or DexScreenerClient()
     touched: set[int] = set()
     tokens = _refresh_selection(db) if tokens is None else tokens
@@ -207,12 +209,17 @@ def refresh_tracked(db: Session, client: DexScreenerClient | None = None, tokens
         for chain_id, chain_tokens in by_chain.items():
             for i in range(0, len(chain_tokens), MAX_ADDRESSES_PER_REQUEST):
                 batch = chain_tokens[i : i + MAX_ADDRESSES_PER_REQUEST]
+                if pace:
+                    pace()
                 res = client.tokens(chain_id, [t.address for t in batch])
                 record_fetch(run, res)
                 if not res.ok:
                     continue
                 keys = {(t.chain_id, t.address): t for t in batch}
-                touched |= ingest_pairs(db, run, res.data, keys, utcnow())
+                now = utcnow()
+                touched |= ingest_pairs(db, run, res.data, keys, now)
+                for t in batch:
+                    t.last_checked_at = now
                 db.commit()
     return touched
 
@@ -253,8 +260,12 @@ def _add_token(db: Session, run: CollectorRun, chains: set[str], chain_id: str |
         run.duplicates += 1
         return None
     tok = Token(chain_id=chain_id, address=address, discovered_via=via, first_seen_at=utcnow())
-    db.add(tok)
-    db.flush()
+    try:
+        with db.begin_nested():  # outro agente pode ter adicionado a mesma moeda agora
+            db.add(tok)
+    except IntegrityError:
+        run.duplicates += 1
+        return None
     run.items_stored += 1
     return tok
 
@@ -276,8 +287,11 @@ def scout(db: Session, name: str, client: JupiterTokensClient | None = None) -> 
     for mint in mints:
         if mint not in known and tracked + added < s.max_tracked_tokens:
             tok = Token(chain_id="solana", address=mint, discovered_via="jupiter_scout", first_seen_at=utcnow())
-            db.add(tok)
-            db.flush()
+            try:
+                with db.begin_nested():
+                    db.add(tok)
+            except IntegrityError:
+                continue
             ids.add(tok.id)
             added += 1
     db.commit()
@@ -445,6 +459,8 @@ def prune_inactive(db: Session) -> int:
         snap = snaps.get(t.primary_pair_id) if t.primary_pair_id else None
         if snap is None:
             dead = True  # nenhum par encontrado pela fonte desde que entrou
+        elif t.last_checked_at and t.last_refreshed_at and t.last_refreshed_at < cutoff and t.last_checked_at > t.last_refreshed_at:
+            dead = True  # a fonte parou de devolver esta moeda há horas, mesmo perguntando
         else:
             liq, vol = snap.liquidity_usd, snap.volume_h24
             dead = (liq is not None and liq < s.prune_min_liquidity_usd) and (vol is not None and vol < s.prune_min_volume_h24_usd)

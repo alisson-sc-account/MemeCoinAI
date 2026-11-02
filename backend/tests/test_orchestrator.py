@@ -221,6 +221,57 @@ def test_estimate_memo_changes_nothing(db, monkeypatch):
 def test_samples_keep_only_current_minute(db):
     from app.engine import outcomes
     now = utcnow()
+    now = now.replace(minute=0)
     for i in range(5):
-        outcomes.estimate(db, 50, 10, now + timedelta(minutes=i))
-    assert {(k[1] if k[0] == "estimate" else k[-1]) for k in outcomes._cache} == {(now + timedelta(minutes=4)).replace(second=0, microsecond=0)}
+        outcomes.estimate(db, 50, 10, now + timedelta(minutes=10 * i))
+    assert {(k[1] if k[0] == "estimate" else k[-1]) for k in outcomes._cache} == {outcomes._bucket(now + timedelta(minutes=40))}
+
+
+# ---------------- Regressões do rodízio travado (2026-11-02) ----------------
+def test_rotation_advances_when_source_returns_nothing(db, fake_dex, monkeypatch):
+    monkeypatch.setenv("REFRESH_HOT_TOKENS", "0")
+    config.get_settings.cache_clear()
+    tokens = _many(db, 90)  # nenhuma existe na fonte simulada
+    seen = set()
+    for _ in range(3):
+        _, cold = svc.split_hot_cold(db)
+        batch = cold[:30]
+        assert not ({t.id for t in batch} & seen)  # nunca as mesmas: é o que prendia 8 mil moedas fora da fila
+        seen |= {t.id for t in batch}
+        svc.refresh_tracked(db, tokens=batch, job="refresh_cold")
+    assert seen == {t.id for t in tokens}
+    assert all(t.last_refreshed_at < t.last_checked_at for t in tokens)  # conferir não finge ter recebido dado
+
+
+def test_source_failure_does_not_advance_rotation(db, fake_dex):
+    token = _many(db, 1)[0]
+    fake_dex.fail = True
+    svc.refresh_tracked(db, tokens=[token], client=fake_dex.client())
+    assert token.last_checked_at is None
+
+
+def test_token_the_source_stopped_returning_is_pruned(db, fake_dex):
+    token, _ = track_token(db, "solana", SOL_MINT)
+    token.discovered_via = "dexscreener_search"
+    old = utcnow() - timedelta(hours=6)
+    token.first_seen_at, token.last_refreshed_at, token.last_checked_at = old, old, old
+    db.commit()
+    assert svc.prune_inactive(db) == 0  # ainda não perguntamos de novo: pode ser só atraso nosso
+    token.last_checked_at = utcnow()
+    db.commit()
+    assert svc.prune_inactive(db) == 1 and not token.is_tracked
+
+
+def test_duplicate_token_from_another_agent_does_not_fail_the_job(db, fake_dex):
+    from app.models import CollectorRun
+    run = CollectorRun(source="t", job="t", started_at=utcnow(), status="running", requests=0, items_received=0, items_stored=0, duplicates=0, errors=0, rate_limited=0)
+    mint = "Dup1" + "1" * 40
+    assert svc._add_token(db, run, {"solana"}, "solana", mint, "t") is not None
+    db.commit()
+    assert svc._add_token(db, run, {"solana"}, "solana", mint, "t") is None and run.duplicates == 1
+
+
+def test_estimate_never_sees_labels_after_its_period(db):
+    from app.engine import outcomes
+    at = utcnow().replace(minute=15, second=0, microsecond=0)
+    assert outcomes._bucket(at) <= at and outcomes._bucket(at).minute == 10

@@ -246,3 +246,14 @@ def test_api_exposes_flow_smart_and_phone(auth_client, fake_dex, db, monkeypatch
     assert auth_client.get(f"{API}/tokens/solana/{SOL_MINT}/exit-plan").json()["flow"] is None
     assert auth_client.get(f"{API}/tokens/solana/{SOL_MINT}").json()["smart_wallets"]["available"] is False
     assert auth_client.get(f"{API}/system/phone").json() == {"enabled": False, "url": None}
+
+
+def test_live_alert_is_only_recorded_while_under_observation(db, fake_dex):
+    from app.tape.__main__ import _raise_alert
+    token, _ = track_token(db, "solana", SOL_MINT)
+    assert config.get_settings().tape_alerts_enabled is False
+    _raise_alert(token.id, {"strength": "strong", "price_usd": 1.0, "reasons": ["r"], "evidence": {}})
+    assert db.query(Alert).filter(Alert.alert_type == "pump_burst").count() == 0  # não incomoda você
+    con = store.connect()
+    assert con.execute("SELECT COUNT(*) FROM tape_alerts").fetchone()[0] == 1  # mas segue medindo
+    con.close()

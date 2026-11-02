@@ -6,7 +6,7 @@ import signal
 import time
 
 import websockets
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app import agents
 from app.api.views import latest_snapshots
@@ -70,9 +70,10 @@ def _raise_alert(token_id: int, found: dict) -> None:
         report = db.get(SecurityReport, token_id)
         token = db.get(Token, token_id)
         blocked = "golpe" if token is None or token.rugged_at else "perigo" if report and report.verdict == "danger" else None
+        # Com o alerta desligado segue registrando: é o que permite comparar e religar só se provar valor.
         con.execute("INSERT INTO tape_alerts VALUES (?, ?, ?, ?, ?)", (token_id, time.time(), found["price_usd"], found["strength"], blocked))
         con.commit()
-        if blocked:
+        if blocked or not get_settings().tape_alerts_enabled:
             return
         extreme = found["strength"] == "extreme"
         cand = AlertCandidate("pump_burst", "critical" if extreme else "high",
@@ -97,6 +98,8 @@ def _add_new_tokens(mints: list[str]) -> int:
     try:
         tracked = db.scalar(select(func.count()).select_from(Token).where(Token.is_tracked.is_(True))) or 0
         known = set(db.scalars(select(Token.address).where(Token.chain_id == "solana", Token.address.in_(mints))))
+        # Moeda que saiu da lista por estar morta e voltou a ser negociada volta a ser acompanhada.
+        db.execute(update(Token).where(Token.chain_id == "solana", Token.address.in_(known), Token.is_tracked.is_(False), Token.rugged_at.is_(None)).values(is_tracked=True))
         added = 0
         for mint in mints:
             if mint not in known and tracked + added < s.max_tracked_tokens:

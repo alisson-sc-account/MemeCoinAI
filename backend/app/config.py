@@ -86,6 +86,7 @@ class Settings(BaseSettings):
     board_enabled: bool = True  # listas prontas em data/board.db (python -m app.board)
     ntfy_base_url: str = "https://ntfy.sh"
     ntfy_enabled: bool = True  # aviso no celular, grátis e sem conta (app/notify.py)
+    tape_alerts_enabled: bool = False  # em observação: na prova ficou bem abaixo do disparo pela coleta
     security_gate: bool = True  # compra forte exige verificação de segurança limpa
     jupiter_price_base_url: str = "https://lite-api.jup.ag"
     solana_rpc_url: str = "https://api.mainnet-beta.solana.com"

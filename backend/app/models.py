@@ -72,6 +72,8 @@ class Token(Base):
     # Volume da última hora: decide quem é atualizado em todo ciclo.
     heat: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")
     # Marca permanente: uma vez golpe, nunca mais volta a parecer segura.
+    # Último pedido à fonte, mesmo sem resposta: é o que faz o rodízio andar. `last_refreshed_at` é a última vez com dado.
+    last_checked_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     rugged_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     rug_reason: Mapped[str | None] = mapped_column(Text)
     # Links públicos informados pela fonte (site, twitter, telegram). Não são validados.

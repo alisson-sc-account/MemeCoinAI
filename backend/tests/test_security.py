@@ -291,3 +291,26 @@ def test_unknown_wallets_do_not_count_as_fresh(db, fake_dex):
     assert r.facts["wallets"]["analyzed"] == 0 and r.facts["wallets"]["fresh_count"] == 0
     assert all(h.get("fresh") is None for h in r.holders)
     assert any(c["key"] == "fresh" and c["status"] == "unknown" for c in r.checks)
+
+
+def test_burst_waits_for_security_on_new_coins(db, fake_dex, monkeypatch):
+    monkeypatch.setenv("SECURITY_GATE", "true")
+    config.get_settings.cache_clear()
+    from datetime import timedelta as td
+    from app.engine.pipeline import burst_allowed
+    token, _ = track_token(db, "solana", SOL_MINT)
+    now = utcnow()
+    token.first_seen_at = now - td(minutes=3)
+    assert burst_allowed(db, token, now) is False  # nova e sem verificação: espera
+    token.first_seen_at = now - td(hours=2)
+    assert burst_allowed(db, token, now) is True  # antiga sem verificação ainda pode
+    sec.scan(db, token, False, FakeRC(_raw(mintAuthority="x")))
+    assert burst_allowed(db, token, now) is False  # perigo bloqueia
+    sec.scan(db, token, False, FakeRC())
+    assert burst_allowed(db, token, now) is True
+
+
+def test_young_hot_coin_is_checked_first(db, fake_dex):
+    token, _ = track_token(db, "solana", SOL_MINT)
+    target = sec.next_target(db)
+    assert target[0].id == token.id

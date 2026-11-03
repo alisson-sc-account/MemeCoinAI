@@ -118,7 +118,7 @@ def main() -> None:
     children = [
         Child("worker", ["-m", "app.worker"]), Child("live", ["-m", "app.live"]), Child("tape", ["-m", "app.tape"]),
         Child("safety", ["-m", "app.safety"]), Child("board", ["-m", "app.board"]),
-        Child("api", ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(args.port)]),
+        Child("api", ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(args.port), "--workers", "2"]),  # 2 processos: uma tela pesada não trava as outras
     ]
     age = backup.newest_age_hours()
     if age is None or age > 1:

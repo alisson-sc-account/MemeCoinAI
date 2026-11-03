@@ -220,6 +220,11 @@ def next_target(db: Session, now: datetime | None = None) -> tuple[Token, bool] 
     for t in live.focused_tokens(db, now):
         if due(t, RECHECK_OPEN):
             return t, True
+    # Moeda nova e quente sem verificação vem logo depois da aberta: o disparo dela espera esta verificação.
+    young = db.scalars(select(Token).where(Token.is_tracked.is_(True), Token.chain_id == "solana", Token.first_seen_at >= now - timedelta(hours=1),
+                                           Token.id.not_in(select(SecurityReport.token_id))).order_by(Token.heat.desc()).limit(1)).first()
+    if young is not None:
+        return young, False
     urgent = db.scalars(select(Token).join(Signal, Signal.token_id == Token.id)
                         .where(Signal.status == "active", Signal.action == "buy", Token.chain_id == "solana")).all()
     urgent = [*urgent, *db.scalars(select(Token).join(Position, Position.token_id == Token.id).where(Token.chain_id == "solana"))]

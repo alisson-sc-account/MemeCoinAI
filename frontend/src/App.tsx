@@ -75,7 +75,7 @@ function TokenDetailPage() {
   const [requestedPositions, setRequestedPositions] = useState('')
   const qc = useQueryClient()
   const q = useQuery({ queryKey: ['token', chainId, address], queryFn: () => apiClient.token(chainId, address), refetchInterval: 3_000, refetchIntervalInBackground: false })
-  const hist = useQuery({ queryKey: ['history', chainId, address, range], queryFn: () => apiClient.history(chainId, address, range), refetchInterval: REFRESH_MS, refetchIntervalInBackground: false })
+  const hist = useQuery({ queryKey: ['history', chainId, address, range], queryFn: () => apiClient.history(chainId, address, range), refetchInterval: 1_000, refetchIntervalInBackground: false })
   const livePlan = useQuery<ExitPlan>({
     queryKey: ['exit-plan', chainId, address], queryFn: () => apiClient.exitPlan(chainId, address),
     refetchInterval: nextPollMs(), refetchIntervalInBackground: false,

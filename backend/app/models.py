@@ -292,6 +292,7 @@ class Signal(Base):
     __table_args__ = (
         Index("ix_signal_token_status", "token_id", "status"),
         Index("ix_signal_created", "created_at"),
+        Index("ix_signal_status_action", "status", "action", "id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

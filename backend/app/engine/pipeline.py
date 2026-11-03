@@ -108,6 +108,19 @@ def build_analysis(db: Session, token: Token, as_of: datetime | None = None) -> 
     return features, risk, opp, mint_d, prev_d, (snaps[-1] if snaps else None), pair
 
 
+BURST_UNVERIFIED_MAX_AGE = timedelta(hours=1)
+
+
+def burst_allowed(db: Session, token: Token, as_of: datetime) -> bool:
+    """Disparo só sai com segurança sem perigo. Moeda com menos de 1 h e ainda sem verificação espera por ela."""
+    if not get_settings().security_gate:
+        return True
+    report = db.get(SecurityReport, token.id)
+    if report is not None:
+        return report.verdict != "danger"
+    return as_of - token.first_seen_at >= BURST_UNVERIFIED_MAX_AGE
+
+
 def analyze_token(db: Session, token: Token, as_of: datetime | None = None, force: bool = False) -> Analysis | None:
     as_of = as_of or utcnow()
     features, risk, opp, mint_d, prev_d, snap, pair = build_analysis(db, token, as_of)
@@ -158,6 +171,8 @@ def analyze_token(db: Session, token: Token, as_of: datetime | None = None, forc
         candidates = [c for c in candidates if c.alert_type != "insufficient_data"]
 
     detected = burst.detect(features)
+    if detected and not burst_allowed(db, token, as_of):
+        detected = None  # moeda nova sem verificação de segurança, ou com perigo: o caso Belka (2026-11-03)
     if detected and fresh_enough(features) and not token.rugged_at:
         stats = burst.pattern_stats(db, as_of)
         extreme = detected["strength"] == "extreme"

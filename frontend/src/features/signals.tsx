@@ -9,7 +9,7 @@ import { readCenterAlerts, wantsSignal, writeCenterAlerts, type CenterAlerts } f
 import styles from './signals.module.css'
 import { playAlertSound, setSoundEnabled, soundEnabled } from './sound'
 
-export const REFRESH_MS = 30_000
+export const REFRESH_MS = 5_000  // telas atualizam sozinhas a cada 5 s
 export const ALERT_POLL_MS = 3_000  // alerta chega em ~3 s depois de detectado
 
 const ACTION_LABEL: Record<string, string> = { buy: 'COMPRAR', sell: 'VENDER', avoid: 'EVITAR', hold: 'AGUARDAR', burst: 'DISPARO AGORA' }

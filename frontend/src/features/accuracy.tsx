@@ -5,7 +5,6 @@ import type { AccuracyItem, AccuracyPage as AccuracyData } from '../api/types'
 import { dateTime, price, shortAddress } from '../lib/format'
 import { FavoriteStar } from './favorites'
 import styles from './accuracy.module.css'
-import { REFRESH_MS } from './signals'
 
 const HORIZONS = [{ key: '15m', label: '15 min' }, { key: '1h', label: '1 hora' }, { key: '6h', label: '6 horas' }] as const
 const RESULTS = [
@@ -63,7 +62,7 @@ export function AccuracyPage() {
   const query = new URLSearchParams({ horizon, page_size: '100' })
   if (result) query.set('result', result)
   if (tier) query.set('tier', tier)
-  const q = useQuery({ queryKey: ['accuracy', query.toString()], queryFn: () => apiClient.accuracy(query.toString()), refetchInterval: REFRESH_MS, refetchIntervalInBackground: false })
+  const q = useQuery({ queryKey: ['accuracy', query.toString()], queryFn: () => apiClient.accuracy(query.toString()), refetchInterval: 30_000, refetchIntervalInBackground: false })
   const set = (key: string, value: string) => { const next = new URLSearchParams(sp); if (value) next.set(key, value); else next.delete(key); setSp(next, { replace: true }) }
   const s = q.data?.summary[horizon]
   return <>

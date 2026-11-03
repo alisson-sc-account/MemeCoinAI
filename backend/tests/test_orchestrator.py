@@ -166,7 +166,7 @@ def test_board_old_or_missing_falls_back(auth_client, fake_dex, db, board_on):
     con = board.read_connection()
     assert con is not None
     con.close()
-    assert board.read_connection(max_age=-1) is None
+    assert board.read_connection(max_age=-1) is None and board.BOARD_MAX_AGE >= 600
 
 
 # ---------------- Agentes ----------------

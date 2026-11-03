@@ -102,7 +102,7 @@ function TokenDetailPage() {
     <SecurityPanel chainId={chainId} address={address}/>
 
     <Card title="Gráfico e simulação" action={<div className={styles.actions}>{['1h', '6h', '24h', '7d'].map(x => <button key={x} className={range === x ? styles.activeButton : styles.button} onClick={() => setRange(x)}>{x}</button>)}</div>}>
-      {hist.isPending ? <Loading/> : hist.isError ? <ErrorBox error={hist.error} retry={() => void hist.refetch()}/> : <Suspense fallback={<Loading/>}><PriceChart points={hist.data.points} range={range} downsampled={hist.data.downsampled} live={livePlan.data?.live ?? null} fallbackPrice={market?.price_usd ?? null} fallbackAt={t.freshness.observed_at} simulation={t.buy_simulation ?? null}/></Suspense>}
+      {hist.isPending ? <Loading/> : hist.isError ? <ErrorBox error={hist.error} retry={() => void hist.refetch()}/> : <Suspense fallback={<Loading/>}><PriceChart points={hist.data.points} range={range} downsampled={hist.data.downsampled} live={livePlan.data?.live ?? null} fallbackPrice={market?.price_usd ?? null} fallbackAt={t.freshness.observed_at} simulation={t.buy_simulation ?? null} chainId={chainId} address={address}/></Suspense>}
       <small className="subtle">Gráficos por <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer">TradingView</a> (lightweight-charts, Apache-2.0).</small>
     </Card>
 

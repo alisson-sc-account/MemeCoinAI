@@ -50,12 +50,18 @@ class Child:
         log.info("%s iniciado (PID %s)", self.name, self.proc.pid)
 
     def stop(self) -> None:
-        if self.proc and self.proc.poll() is None:
+        """Encerra o processo e os filhos. No Windows o python do .venv abre um segundo processo: matar só o
+        primeiro deixava o filho vivo, segurando a trava, e o reinício nunca acontecia."""
+        if not self.proc or self.proc.poll() is not None:
+            return
+        if sys.platform == "win32":
+            subprocess.run(["taskkill", "/PID", str(self.proc.pid), "/T", "/F"], capture_output=True)
+        else:
             self.proc.terminate()
-            try:
-                self.proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                self.proc.kill()
+        try:
+            self.proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
 
 
 def backoff(restarts: int) -> float:
@@ -67,8 +73,21 @@ def collector_stalled(now=None) -> bool:
     try:
         hb = db.get(ServiceHeartbeat, "market_hot")
         return bool(hb and hb.last_tick_at and (now or utcnow()) - hb.last_tick_at > STALL_LIMIT)
+    except Exception:
+        log.exception("não consegui ler o batimento do coletor")
+        return False
     finally:
         db.close()
+
+
+def keep_awake(on: bool) -> None:
+    """Impede o Windows de dormir por inatividade enquanto o sistema roda (tela pode apagar). Desfaz ao sair.
+    Com o PC dormindo a coleta para e os dados envelhecem: foi o que deixou o coletor 12 h parado."""
+    if sys.platform != "win32":
+        return
+    import ctypes
+    ES_CONTINUOUS, ES_SYSTEM_REQUIRED = 0x80000000, 0x00000001
+    ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | (ES_SYSTEM_REQUIRED if on else 0))
 
 
 def _stop(*_):
@@ -85,6 +104,12 @@ def _safe_backup() -> None:
 
 def main() -> None:
     setup_logging()
+    folder = BACKEND_DIR / "data" / "logs"
+    folder.mkdir(parents=True, exist_ok=True)
+    handler = logging.FileHandler(folder / "supervisor.log", encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    logging.getLogger().addHandler(handler)
+    keep_awake(True)
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
@@ -102,9 +127,17 @@ def main() -> None:
     for c in children:
         c.start()
     print(f"\nMemeCoinAI rodando: abra http://127.0.0.1:{args.port}\nPara desligar e salvar: stop.bat ou Ctrl+C aqui.\n", flush=True)
+    last_wall = time.time()
     try:
         while _running:
             now = time.monotonic()
+            # Voltou de suspensão (relógio pulou): conexões e travas antigas podem estar mortas; reinicia tudo.
+            if time.time() - last_wall > 120:
+                log.warning("o computador voltou de uma suspensão: reiniciando os programas")
+                for c in children:
+                    c.stop()
+                    c.next_start = 0.0
+            last_wall = time.time()
             for c in children:
                 if c.proc is not None and c.proc.poll() is None:
                     if now - c.started > 300:
@@ -131,6 +164,7 @@ def main() -> None:
     finally:
         for c in reversed(children):
             c.stop()
+        keep_awake(False)
         _safe_backup()
         log.info("sistema desligado")
 

@@ -19,6 +19,8 @@ from app.models import Alert, Signal, Token
 
 log = logging.getLogger("notify")
 DAILY_CAP = 200
+TOKEN_COOLDOWN = 3600.0  # a mesma moeda no máximo 1 aviso por hora: o sinal oscila e repetia aviso
+_last_by_token: dict[int, float] = {}
 _state: dict = {"alert": None, "signal": None, "day": None, "sent": 0}
 
 
@@ -65,6 +67,15 @@ def send(title: str, body: str, link: str | None = None, client: httpx.Client | 
 
 def reset() -> None:
     _state.update(alert=None, signal=None, day=None, sent=0)
+    _last_by_token.clear()
+
+
+def _fresh_for(token_id: int) -> bool:
+    now = time.time()
+    if now - _last_by_token.get(token_id, 0.0) < TOKEN_COOLDOWN:
+        return False
+    _last_by_token[token_id] = now
+    return True
 
 
 def _dex_link(token: Token) -> str:
@@ -86,10 +97,10 @@ def run_once(db: Session, client: httpx.Client | None = None) -> int:
     _state.update(alert=max_alert, signal=max_signal)
     for a in alerts:
         token = db.get(Token, a.token_id) if a.token_id else None
-        if token and not token.rugged_at:
+        if token and not token.rugged_at and _fresh_for(token.id):
             sent += send(f"DISPARO {token.symbol or ''}".strip(), a.reason, _dex_link(token), client)
     for s in signals:
         token = db.get(Token, s.token_id)
-        if token and not token.rugged_at:
+        if token and not token.rugged_at and _fresh_for(token.id):
             sent += send(f"COMPRA FORTE {token.symbol or ''}".strip(), s.headline, _dex_link(token), client)
     return sent

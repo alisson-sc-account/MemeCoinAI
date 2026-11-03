@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
+import { apiClient } from '../api/client'
 import { createChart, type IChartApi, type Time, type TickMarkFormatter, type TimeFormatterFn } from 'lightweight-charts'
 import type { BuySimulation, ExitPlan, History } from '../api/types'
 import { ageText, percent, price, usd } from '../lib/format'
@@ -16,13 +19,22 @@ type Props = {
   fallbackPrice: number | null
   fallbackAt: string | null
   simulation: BuySimulation | null
+  chainId?: string
+  address?: string
 }
 
 const clock = (iso: string) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 const MIN_VISIBLE_BARS = 40
 const coins = new Intl.NumberFormat('pt-BR').format(SIMULATED_COINS)
 
-export default function PriceChart({ points, range, downsampled, live, fallbackPrice, fallbackAt, simulation }: Props) {
+export default function PriceChart({ points, range, downsampled, live, fallbackPrice, fallbackAt, simulation, chainId, address }: Props) {
+  const qc = useQueryClient()
+  // Parar de contar: grava o ganho deste instante em Favoritados e congela o painel.
+  const stop = useMutation({
+    mutationFn: () => apiClient.addFavorite(chainId ?? '', address ?? '', simulation?.signal_id ?? null),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['favorites'] }),
+  })
+  const frozen = stop.data
   const container = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRef = useRef<ReturnType<IChartApi['addCandlestickSeries']> | null>(null)
@@ -129,7 +141,7 @@ export default function PriceChart({ points, range, downsampled, live, fallbackP
     const first = Number(candles[0].time)
     if (at < first) { series.setMarkers([]); return }
     const nearest = candles.reduce((best, c) => Math.abs(Number(c.time) - at) < Math.abs(Number(best.time) - at) ? c : best, candles[0])
-    series.setMarkers([{ time: nearest.time, position: 'belowBar', color: '#22c55e', shape: 'arrowUp', text: 'COMPRA' }])
+    series.setMarkers([{ time: nearest.time, position: 'belowBar', color: '#22c55e', shape: 'arrowUp', text: 'INICIOU AQUI' }])
   }, [candles, simulation])
 
   const good = sim != null && sim.pnl >= 0
@@ -142,8 +154,14 @@ export default function PriceChart({ points, range, downsampled, live, fallbackP
 
     <aside className={styles.panel} aria-label="Simulação" aria-live="polite">
       {simulation && sim ? <>
-        <small className={styles.meta}>Se você tivesse comprado {coins} moedas no sinal das <b>{clock(simulation.signal_at)}</b></small>
-        <strong className={`${styles.pnl} ${good ? styles.positive : styles.negative}`}>{percent(sim.pnlPercent)}</strong>
+        <small className={styles.meta}>Iniciou no sinal das <b>{clock(simulation.signal_at)}</b> ({coins} moedas)</small>
+        <small className={styles.meta}>{frozen ? 'Lucro congelado ao parar' : 'Lucro até agora'}</small>
+        {frozen ? <strong className={`${styles.pnl} ${(frozen.gain_at_favorite ?? 0) >= 0 ? styles.positive : styles.negative}`}>{percent(frozen.gain_at_favorite == null ? null : frozen.gain_at_favorite * 100)}</strong>
+          : <strong className={`${styles.pnl} ${good ? styles.positive : styles.negative}`}>{percent(sim.pnlPercent)}</strong>}
+        {chainId && address && (frozen
+          ? <Link to="/favoritados" className={styles.stopDone}>Salvo em Favoritados →</Link>
+          : <button type="button" className={styles.stopButton} disabled={stop.isPending} onClick={() => stop.mutate()}>{stop.isPending ? 'Salvando…' : 'Parar de contar'}</button>)}
+        {stop.isError && <small className={styles.negative}>{(stop.error as Error).message}</small>}
         <div className={styles.metrics}>
           <div><small>Pagou</small><b>{price(sim.paid)}</b></div>
           <div><small>Vale agora</small><b>{price(sim.value)}</b></div>

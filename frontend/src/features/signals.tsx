@@ -244,6 +244,17 @@ export function PhoneSettings() {
   </div>
 }
 
+const ALERT_COOLDOWN_MS = 3_600_000
+function recentlyAlerted(address: string, id: number): boolean {
+  try {
+    const key = `mcai-alerted-${address}`
+    const prev = JSON.parse(localStorage.getItem(key) ?? 'null') as { id: number; at: number } | null
+    if (prev && prev.id !== id && Date.now() - prev.at < ALERT_COOLDOWN_MS) return true
+    if (!prev || prev.id !== id) localStorage.setItem(key, JSON.stringify({ id, at: Date.now() }))
+  } catch { /* sem armazenamento: mostra */ }
+  return false
+}
+
 export function CenterAlertSettings() {
   const [prefs, setPrefs] = useState(readCenterAlerts)
   const change = (key: keyof CenterAlerts, on: boolean) => { const next = { ...prefs, [key]: on }; setPrefs(next); writeCenterAlerts(next) }
@@ -261,7 +272,8 @@ export function SignalWatcher({ username }: { username: string }) {
   const burst = useBurstWatch(username, navigate, prefs.burst)
   const [lastSeen, setLastSeen] = useState<number | null>(() => readLastSeen(username))
   const q = useQuery({ queryKey: ['signals', 'watch'], queryFn: () => apiClient.signals('action=buy&action=sell&page_size=20'), refetchInterval: ALERT_POLL_MS, refetchIntervalInBackground: true })
-  const relevant = (q.data?.items ?? []).filter(s => wantsSignal(prefs, s.action, s.strength))
+  // A mesma moeda só abre alerta de novo depois de 1 h: o sinal oscila e repetia o aviso.
+  const relevant = (q.data?.items ?? []).filter(s => wantsSignal(prefs, s.action, s.strength) && !recentlyAlerted(s.token.address, s.id))
   const maxId = relevant.reduce((m, s) => Math.max(m, s.id), 0)
   useEffect(() => {
     // Primeira visita: não abre alerta de sinais antigos, só passa a vigiar os novos.

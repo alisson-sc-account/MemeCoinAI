@@ -185,8 +185,8 @@ def test_phone_sends_only_new_extreme_and_strong(db, fake_dex, monkeypatch, tmp_
     db.add(Signal(token_id=token.id, action="buy", strength="moderate", status="active", headline="fraca", reasons=[], risk_score=1, risk_level="low", opportunity_score=50, estimates=[], rules_version="sig-1"))
     db.add(Signal(token_id=token.id, action="buy", strength="strong", status="superseded", headline="forte", reasons=[], risk_score=1, risk_level="low", opportunity_score=70, estimates=[], rules_version="sig-1"))
     db.commit()
-    assert notify.run_once(db, client) == 2
-    assert [s[1] for s in sent] == ["novo", "forte"] and sent[0][2].endswith(SOL_MINT)
+    assert notify.run_once(db, client) == 1  # disparo e compra forte da mesma moeda: um aviso só
+    assert [s[1] for s in sent] == ["novo"] and sent[0][2].endswith(SOL_MINT)
     assert notify.run_once(db, client) == 0
     notify._state["sent"] = notify.DAILY_CAP
     assert notify.send("t", "b", client=client) is False  # respeita o limite do serviço grátis
@@ -257,3 +257,17 @@ def test_live_alert_is_only_recorded_while_under_observation(db, fake_dex):
     con = store.connect()
     assert con.execute("SELECT COUNT(*) FROM tape_alerts").fetchone()[0] == 1  # mas segue medindo
     con.close()
+
+
+def test_phone_one_notice_per_coin_per_hour(db, fake_dex, monkeypatch, tmp_path):
+    monkeypatch.setenv("NTFY_ENABLED", "true")
+    config.get_settings.cache_clear()
+    monkeypatch.setattr(notify, "topic_path", lambda: tmp_path / "topic.txt")
+    notify.reset()
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={})))
+    token, _ = track_token(db, "solana", SOL_MINT)
+    notify.run_once(db, client)
+    for i in range(3):  # sinal oscilando: compra forte de novo e de novo
+        db.add(Signal(token_id=token.id, action="buy", strength="strong", status="superseded", headline=f"f{i}", reasons=[], risk_score=1, risk_level="low", opportunity_score=70, estimates=[], rules_version="sig-1"))
+        db.commit()
+        assert notify.run_once(db, client) == (1 if i == 0 else 0)

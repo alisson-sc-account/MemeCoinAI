@@ -49,3 +49,6 @@
 .pnl { font-size: 34px; font-weight: 700; font-family: 'JetBrains Mono', ui-monospace, monospace; }
 .panel { background: var(--surface-1); }
 .panel .meta { margin: 0; }
+.stopButton { min-height: 40px; border: 0; border-radius: var(--radius-sm); background: var(--text); color: var(--bg); font-weight: 700; cursor: pointer; }
+.stopButton:disabled { opacity: .6; }
+.stopDone { font-weight: 600; text-decoration: underline; }

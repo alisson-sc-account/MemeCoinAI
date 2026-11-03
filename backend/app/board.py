@@ -20,7 +20,7 @@ from app.logging_setup import setup_logging
 from app.worker_lock import WorkerAlreadyRunning, WorkerLock
 
 log = logging.getLogger("board")
-BOARD_MAX_AGE = 120.0
+BOARD_MAX_AGE = 1800.0  # lista de até 30 min (com a hora visível) é melhor que calcular tudo na requisição
 PAUSE_SECONDS = 5.0
 OPP_COLUMNS = ("tier_order", "score", "score_change", "liquidity_usd", "volume_h24", "price_change_h1", "risk_score", "pair_age_hours")
 TOKEN_SORTS = ("opportunity_score", "risk_score", "liquidity_usd", "volume_h24", "volume_h1", "price_change_h1", "price_change_h24", "market_cap",

@@ -7,3 +7,6 @@
 
 /* Tema MemeCoinAI (padrão): preto profundo, verde da alta, vermelho da queda, texto prata. O "Clássico" é o :root acima. */
 :root[data-theme="memecoinai"]{--bg:#08090a;--surface-1:#0f1112;--surface-2:#161a1b;--surface-3:#1e2324;--border:#222827;--border-strong:#34403b;--text:#eef1ef;--text-muted:#a3aca7;--text-subtle:#7f8a85;--accent:#16c75f;--accent-soft:rgba(22,199,95,.12);--focus:#16c75f;--brand-green:#16c75f;--brand-green-2:#4be38a;--brand-red:#e3262b;--risk-critical:#e3262b;--risk-low:#16c75f;--positive:#16c75f;--negative:#e3262b;--opportunity:#16c75f;--radius-sm:6px;--radius-md:10px;--shadow-card:none}
+
+/* Tema Profissional (padrão): grafite azulado, verde da marca só onde importa, tipografia do sistema. */
+:root[data-theme="pro"]{font-family:Inter,"Segoe UI",system-ui,sans-serif;--bg:#09090b;--surface-1:#111113;--surface-2:#18181b;--surface-3:#232327;--border:#1f1f23;--border-strong:#2e2e33;--text:#fafafa;--text-muted:#a1a1aa;--text-subtle:#71717a;--accent:#10b981;--accent-soft:rgba(16,185,129,.10);--focus:#10b981;--brand-green:#10b981;--brand-green-2:#34d399;--brand-red:#f43f5e;--risk-critical:#f43f5e;--risk-high:#fb923c;--risk-moderate:#facc15;--risk-low:#10b981;--positive:#10b981;--negative:#f43f5e;--opportunity:#10b981;--info:#a1a1aa;--stale:#a1a1aa;--radius-sm:8px;--radius-md:12px;--shadow-card:none}

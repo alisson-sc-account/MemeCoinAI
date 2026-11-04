@@ -21,7 +21,7 @@ from app.worker_lock import WorkerAlreadyRunning, WorkerLock
 
 log = logging.getLogger("board")
 BOARD_MAX_AGE = 1800.0  # lista de até 30 min (com a hora visível) é melhor que calcular tudo na requisição
-PAUSE_SECONDS = 5.0
+PAUSE_SECONDS = 20.0  # cada volta lê 14 mil moedas (~50 s de CPU): com 5 s de pausa a API ficava lenta
 OPP_COLUMNS = ("tier_order", "score", "score_change", "liquidity_usd", "volume_h24", "price_change_h1", "risk_score", "pair_age_hours")
 TOKEN_SORTS = ("opportunity_score", "risk_score", "liquidity_usd", "volume_h24", "volume_h1", "price_change_h1", "price_change_h24", "market_cap",
                "pair_age_hours", "first_seen_at", "observed_at")

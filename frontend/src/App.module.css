@@ -57,3 +57,40 @@ input,select{border-radius:var(--radius-sm)}
 
 :global([data-theme="memecoinai"]) .meter i{background:linear-gradient(90deg,var(--brand-green),var(--brand-green-2))}
 
+
+:global([data-theme="pro"]) .brandText b,:global([data-theme="pro"]) .loginWord b{color:var(--brand-green)}
+:global([data-theme="pro"]) .sidebar{background:var(--bg);border-right-color:var(--border)}
+:global([data-theme="pro"]) .navItem{border-radius:8px;border-left:0;margin:0 6px;min-height:36px;font-size:13.5px;font-weight:500;color:var(--text-muted)}
+:global([data-theme="pro"]) .navItem:hover{background:var(--surface-2);color:var(--text)}
+:global([data-theme="pro"]) .active{background:var(--surface-2);color:var(--text)}
+:global([data-theme="pro"]) .active svg{color:var(--brand-green)}
+:global([data-theme="pro"]) .topbar{background:rgba(9,9,11,.8);backdrop-filter:blur(12px);border-bottom-color:var(--border)}
+:global([data-theme="pro"]) .content{gap:16px;padding-top:28px}
+:global([data-theme="pro"]) .heading h1{font-size:22px}
+:global([data-theme="pro"]) .heading p{color:var(--text-subtle)}
+:global([data-theme="pro"]) .card{border-radius:12px;background:var(--surface-1);border-color:var(--border);padding:20px}
+:global([data-theme="pro"]) .cardHead h2{font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
+:global([data-theme="pro"]) .kpi{font-size:28px;font-weight:600;letter-spacing:-.02em;font-family:Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums}
+:global([data-theme="pro"]) .badge{border-radius:6px;padding:2px 8px;font-weight:500;font-size:11.5px}
+:global([data-theme="pro"]) .button,:global([data-theme="pro"]) .primaryButton,:global([data-theme="pro"]) .dangerButton,:global([data-theme="pro"]) .activeButton{border-radius:8px;font-weight:500;min-height:36px;padding:0 14px}
+:global([data-theme="pro"]) .button{background:var(--surface-2);border-color:var(--border-strong)}
+:global([data-theme="pro"]) .button:hover{background:var(--surface-3)}
+:global([data-theme="pro"]) .primaryButton{background:var(--text);border-color:var(--text);color:var(--bg);font-weight:600}
+:global([data-theme="pro"]) .primaryButton:hover{background:#e4e4e7}
+:global([data-theme="pro"]) .dangerButton{color:var(--brand-red);border-color:rgba(244,63,94,.4)}
+:global([data-theme="pro"]) .tableWrap{border-radius:12px;border-color:var(--border)}
+:global([data-theme="pro"]) th{background:var(--surface-1)}
+:global([data-theme="pro"]) .passwordBanner{background:var(--surface-1);border-bottom-color:var(--border);color:var(--text-muted);font-size:13px}
+:global([data-theme="pro"]) .meter{height:4px;border-radius:4px;background:var(--surface-3)}:global([data-theme="pro"]) .meter i{background:var(--brand-green);border-radius:4px}
+:global([data-theme="pro"]) .loginCard{border-radius:16px;padding:32px;background:var(--surface-1);border-color:var(--border)}
+:global([data-theme="pro"]) .userFoot{border-top-color:var(--border)}
+:global([data-theme="pro"]) .kpiGrid>*{position:relative;overflow:hidden}
+:global([data-theme="pro"]) .kpiGrid>*::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:var(--border-strong)}
+:global([data-theme="pro"]) .kpiGrid>:nth-child(2)::before{background:#facc15}:global([data-theme="pro"]) .kpiGrid>:nth-child(2) .kpi{color:#fde68a}
+:global([data-theme="pro"]) .kpiGrid>:nth-child(3)::before{background:#f43f5e}:global([data-theme="pro"]) .kpiGrid>:nth-child(3) .kpi{color:#fda4af}
+:global([data-theme="pro"]) .kpiGrid>:nth-child(4)::before{background:#10b981}:global([data-theme="pro"]) .kpiGrid>:nth-child(4) .kpi{color:#6ee7b7}
+:global([data-theme="pro"]) .kpiGrid .cardHead h2{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+:global([data-theme="pro"]) .passwordBanner{padding:6px 28px;font-size:12px;background:transparent;border-bottom-color:var(--border);color:var(--text-subtle)}
+:global([data-theme="pro"]) .passwordBanner a{color:#facc15}
+:global([data-theme="pro"]) .avatar{background:var(--surface-2);border-color:var(--border-strong);font-weight:600}
+:global([data-theme="pro"]) .userFoot{padding-top:12px}

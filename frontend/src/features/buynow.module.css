@@ -84,3 +84,15 @@
 .agentGroup h3 { margin: 0 0 4px; font-size: 13px; color: var(--text-muted); font-weight: 600; }
 .agent { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--space-2); align-items: center; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
 .agent b { font-weight: 500; }
+
+/* ----- Tema MemeCoinAI (padrão) ----- */
+:global([data-theme="pro"]) .card{border-radius:14px;background:var(--surface-1);border-color:var(--border)}
+:global([data-theme="pro"]) .card:hover{border-color:var(--border-strong)}
+:global([data-theme="pro"]) .chip{border-radius:6px;font-weight:600;letter-spacing:.02em}
+:global([data-theme="pro"]) .price{font-size:22px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+:global([data-theme="pro"]) .up,:global([data-theme="pro"]) .deltaUp{color:#10b981}:global([data-theme="pro"]) .down,:global([data-theme="pro"]) .deltaDown{color:#f43f5e}
+:global([data-theme="pro"]) .meter{height:4px;border-radius:4px;background:var(--surface-3)}
+:global([data-theme="pro"]) .price{font-family:Inter,system-ui,sans-serif;font-size:24px;font-weight:650}
+:global([data-theme="pro"]) .delta{font-family:Inter,system-ui,sans-serif;font-weight:600;border-radius:6px;font-size:11.5px}
+:global([data-theme="pro"]) .addr{color:var(--text-subtle)}
+:global([data-theme="pro"]) .card{padding:18px}

@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     # (deduplicadas); em troca, a mudança aparece até 30 s mais cedo.
     refresh_interval_seconds: int = 30
     refresh_hot_tokens: int = 450  # 15 req a cada ~8 s: moeda subindo tem preço novo em segundos, não em ~45 s
-    refresh_hot_interval_seconds: int = 8
+    refresh_hot_interval_seconds: int = 10
     refresh_requests_per_cycle: int = 75
     refresh_cold_requests_per_cycle: int = 70  # 140 req/min: 4200 moedas/min em rodízio
     discovery_interval_seconds: int = 60

@@ -1,14 +1,15 @@
 import { useState } from 'react'
 
 export const THEMES = [
-  { id: 'memecoinai', label: 'MemeCoinAI', hint: 'Preto, verde e vermelho da marca' },
+  { id: 'pro', label: 'MemeCoinAI (padrão)', hint: 'Preto neutro, decisões em cartões coloridos, igual à janela de venda' },
+  { id: 'memecoinai', label: 'Marca (antigo)', hint: 'Preto, verde e vermelho do primeiro logo' },
   { id: 'classic', label: 'Clássico', hint: 'O tema cinza original' },
 ] as const
 export type ThemeId = (typeof THEMES)[number]['id']
 const KEY = 'mcai-theme'
 
 export function readTheme(): ThemeId {
-  try { const t = localStorage.getItem(KEY); return THEMES.some(x => x.id === t) ? (t as ThemeId) : 'memecoinai' } catch { return 'memecoinai' }
+  try { const t = localStorage.getItem(KEY); return THEMES.some(x => x.id === t) ? (t as ThemeId) : 'pro' } catch { return 'pro' }
 }
 
 export function applyTheme(t: ThemeId = readTheme()) {

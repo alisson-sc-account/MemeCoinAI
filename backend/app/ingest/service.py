@@ -178,7 +178,10 @@ def split_hot_cold(db: Session, boosted: set[int] | None = None) -> tuple[list[T
     """Quentes: posições, sinais de compra/venda, radar, novatos e mais volume. Frios: o resto, do mais antigo."""
     s = get_settings()
     tokens = db.scalars(select(Token).where(Token.is_tracked.is_(True))).all()
-    held = set(db.scalars(select(Position.token_id)).all())
+    from app.live.service import watched_tokens
+
+    # Moeda aberta na tela também é prioridade: sem isto ela ficava "atrasada há 11 min" e sem sinal.
+    held = set(db.scalars(select(Position.token_id)).all()) | {t.id for t in watched_tokens(db)}
     urgent = held | (boosted or set())
     # Venda só é urgente se você tem a moeda: milhares de sinais de venda de moedas mortas enchiam o grupo quente.
     urgent |= set(db.scalars(select(Signal.token_id).where(Signal.status == "active", Signal.action == "buy")).all())

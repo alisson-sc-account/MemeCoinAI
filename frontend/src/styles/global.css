@@ -7,3 +7,14 @@
 [data-theme="memecoinai"] body{background:var(--bg)}
 [data-theme="memecoinai"] h1,[data-theme="memecoinai"] h2{letter-spacing:.01em}
 [data-theme="memecoinai"] a:focus-visible,[data-theme="memecoinai"] button:focus-visible,[data-theme="memecoinai"] input:focus-visible,[data-theme="memecoinai"] select:focus-visible{outline:2px solid var(--brand-green);outline-offset:2px}
+
+/* ----- Tema Profissional ----- */
+[data-theme="pro"] body{background:var(--bg);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+[data-theme="pro"] h1{font-weight:600;letter-spacing:-.02em}
+[data-theme="pro"] h2,[data-theme="pro"] h3{font-weight:600;letter-spacing:-.005em}
+[data-theme="pro"] code,[data-theme="pro"] .mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+[data-theme="pro"] ::-webkit-scrollbar{width:10px;height:10px}[data-theme="pro"] ::-webkit-scrollbar-thumb{background:#27272a;border-radius:8px;border:2px solid var(--bg)}
+[data-theme="pro"] input,[data-theme="pro"] select,[data-theme="pro"] textarea{border-radius:8px;background:var(--surface-2);border-color:var(--border-strong)}
+[data-theme="pro"] input:focus,[data-theme="pro"] select:focus,[data-theme="pro"] textarea:focus{outline:none;border-color:var(--brand-green);box-shadow:0 0 0 3px rgba(16,185,129,.15)}
+[data-theme="pro"] table{font-size:13px}[data-theme="pro"] th{text-transform:uppercase;font-size:11px;letter-spacing:.04em}
+[data-theme="pro"] tbody tr:hover td{background:var(--surface-2)}

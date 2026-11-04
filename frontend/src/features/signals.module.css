@@ -76,3 +76,21 @@
 .callWhy { margin: 0; font-size: 15px; }
 .phoneLink { overflow-wrap: anywhere; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; text-decoration: underline; }
 .flowLine { margin: 0; font-size: 13px; color: var(--text-muted); }
+
+/* ----- Tema MemeCoinAI (padrão): mesmo esquema da janela de venda ----- */
+:global([data-theme="pro"]) .hero{border:1px solid var(--border);border-left-width:1px;border-radius:14px;background:var(--surface-1);box-shadow:none;padding:18px 20px}
+:global([data-theme="pro"]) .hero.buy{border-color:rgba(16,185,129,.35);background:rgba(16,185,129,.06)}
+:global([data-theme="pro"]) .hero.sell{border-color:rgba(244,63,94,.35);background:rgba(244,63,94,.07)}
+:global([data-theme="pro"]) .hero.avoid{border-color:rgba(251,146,60,.35);background:rgba(251,146,60,.06)}
+:global([data-theme="pro"]) .hero.burst{border-color:rgba(56,189,248,.35);background:rgba(56,189,248,.06)}
+:global([data-theme="pro"]) .hero .call{font-size:28px;font-weight:700;letter-spacing:-.02em}
+:global([data-theme="pro"]) .hero.buy .call{color:#10b981}:global([data-theme="pro"]) .hero.sell .call{color:#f43f5e}:global([data-theme="pro"]) .hero.avoid .call{color:#fb923c}
+:global([data-theme="pro"]) .big{font-size:24px;line-height:30px;font-weight:700;letter-spacing:-.02em}
+:global([data-theme="pro"]) .modal{border-radius:16px;border:1px solid var(--border-strong);background:#0f0f11;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+:global([data-theme="pro"]) .modal.buy{border-top:1px solid var(--border-strong);box-shadow:0 0 0 1px rgba(16,185,129,.35),0 30px 80px rgba(0,0,0,.6)}
+:global([data-theme="pro"]) .modal.sell{border-top:1px solid var(--border-strong);box-shadow:0 0 0 1px rgba(244,63,94,.4),0 30px 80px rgba(0,0,0,.6)}
+:global([data-theme="pro"]) .modal.burst{border-top:1px solid var(--border-strong);box-shadow:0 0 0 1px rgba(56,189,248,.35),0 30px 80px rgba(0,0,0,.6)}
+:global([data-theme="pro"]) .stats{border-radius:12px;background:var(--surface-2)}
+:global([data-theme="pro"]) .btn{border-radius:10px;background:var(--surface-2);border-color:var(--border-strong);font-weight:500}
+:global([data-theme="pro"]) .btnPrimary{border-radius:10px;background:#fafafa;border-color:#fafafa;color:#09090b;font-weight:600}
+:global([data-theme="pro"]) .meta{color:var(--text-subtle)}

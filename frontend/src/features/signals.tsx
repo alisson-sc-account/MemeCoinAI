@@ -147,7 +147,7 @@ function useBurstWatch(username: string, navigate: (to: string) => void, enabled
   if (!top) return null
   const dismiss = () => { setLastSeen(maxId); write(maxId) }
   const stats = patternStats(top)
-  const buy = top.token ? () => { dismiss(); openAxiom(top.token!.address); void openFloating(top.token!.chain_id, top.token!.address, top.token!.symbol || 'Moeda').catch(() => undefined) } : undefined
+  const buy = top.token ? () => { const f = openFloating(top.token!.chain_id, top.token!.address, top.token!.symbol || 'Moeda').catch(() => false); dismiss(); openAxiom(top.token!.address); void f } : undefined
   return <div className={styles.shade} role="presentation" onClick={dismiss}>
     <CloseOnEscape onClose={dismiss} onEnter={buy} />
     <div className={`${styles.modal} ${styles.burst}`} role="alertdialog" aria-modal="true" aria-labelledby="burst-title" onClick={e => e.stopPropagation()}>
@@ -310,7 +310,7 @@ export function SignalWatcher({ username }: { username: string }) {
   const dismiss = () => { setLastSeen(maxId); writeLastSeen(username, maxId) }
   const e1 = top.estimates.find(e => e.horizon === '1h')
   const canAsk = typeof Notification !== 'undefined' && Notification.permission === 'default'
-  const buy = () => { dismiss(); openAxiom(top.token.address); void openFloating(top.token.chain_id, top.token.address, top.token.symbol || 'Moeda').catch(() => undefined) }
+  const buy = () => { const f = openFloating(top.token.chain_id, top.token.address, top.token.symbol || 'Moeda').catch(() => false); dismiss(); openAxiom(top.token.address); void f }
   return <div className={styles.shade} role="presentation" onClick={dismiss}>
     <CloseOnEscape onClose={dismiss} onEnter={buy} />
     <div className={`${styles.modal} ${styles[top.action] ?? ''}`} role="alertdialog" aria-modal="true" aria-labelledby="signal-title" onClick={e => e.stopPropagation()}>

@@ -6,8 +6,8 @@ import { openAxiom } from '../lib/axiom'
 
 /** Janela de venda que fica por cima de tudo (Alt+Tab para a Axiom continua mostrando). Picture-in-Picture de documento. */
 const POLL_MS = 1500
-const COLORS = { sell_now: '#e3262b', reduce: '#f97316', hold: '#16c75f', no_data: '#8c8c91' } as Record<string, string>
-const TITLE = { sell_now: 'VENDER AGORA', reduce: 'REDUZIR', hold: 'SEGURAR', no_data: 'SEM DADOS' } as Record<string, string>
+const COLORS = { sell_now: '#f43f5e', reduce: '#fb923c', hold: '#10b981', no_data: '#a1a1aa' } as Record<string, string>
+const TITLE = { sell_now: 'Vender agora', reduce: 'Reduzir', hold: 'Segurar', no_data: 'Sem dados' } as Record<string, string>
 
 type PipApi = { requestWindow: (o: { width: number; height: number }) => Promise<Window> }
 const pip = () => (window as unknown as { documentPictureInPicture?: PipApi }).documentPictureInPicture
@@ -45,24 +45,48 @@ function FloatingView({ chainId, address, symbol, win }: { chainId: string; addr
     const t = win.setInterval(() => void tick(), POLL_MS)
     return () => { alive = false; win.clearInterval(t) }
   }, [chainId, address, win])
-  const color = COLORS[p?.urgency ?? 'no_data']
   const age = at ? Math.round((Date.now() - at) / 1000) : null
-  return <div style={{ fontFamily: 'Inter,system-ui,sans-serif', color: '#eef1ef', background: '#08090a', height: '100vh', padding: 12, boxSizing: 'border-box', display: 'grid', gap: 8, alignContent: 'start', borderTop: `4px solid ${color}` }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-      <b style={{ fontSize: 15 }}>{symbol}</b>
-      <small style={{ color: '#7f8a85' }}>{err ? 'sem conexão' : age == null ? '…' : `ao vivo · ${p?.live?.status ?? ''}`}</small>
+  const u = p?.urgency ?? 'no_data'
+  const color = COLORS[u]
+  const chg = p?.change_from_reference
+  const up = (chg ?? 0) >= 0
+  const stop = p?.stop?.price_usd, tgt = p?.take_profits?.[0]?.price_usd, cur = p?.current_price_usd
+  const pos = stop && tgt && cur && tgt > stop ? Math.max(0, Math.min(1, (cur - stop) / (tgt - stop))) : null
+  const muted = '#a1a1aa', faint = '#71717a', line = '#232327'
+  const row = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12.5 } as const
+  return <div style={{ fontFamily: 'Inter,"Segoe UI",system-ui,sans-serif', color: '#fafafa', background: '#09090b', minHeight: '100vh', padding: 14, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={row}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <img src="/brand/mark.png" alt="" width={18} height={18} />
+        <b style={{ fontSize: 14, letterSpacing: '-.01em' }}>{symbol}</b>
+      </span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: err ? '#f43f5e' : faint, fontSize: 11 }}>
+        <i style={{ width: 6, height: 6, borderRadius: 9, background: err ? '#f43f5e' : p?.live?.status === 'live' ? '#10b981' : '#facc15', display: 'inline-block' }} />
+        {err ? 'sem conexão' : age == null ? 'conectando' : p?.live?.status === 'live' ? 'ao vivo' : 'atrasado'}
+      </span>
     </div>
-    <div style={{ background: color, color: '#050506', borderRadius: 8, padding: '8px 10px', fontWeight: 800, fontSize: 20, textAlign: 'center' }}>
-      {TITLE[p?.urgency ?? 'no_data']}{p?.sell_percent_now ? ` ${p.sell_percent_now}%` : ''}
+    <div style={{ border: `1px solid ${color}55`, background: `${color}14`, borderRadius: 12, padding: '12px 14px' }}>
+      <div style={{ fontSize: 11, color: muted, textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 600 }}>Agora</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color, letterSpacing: '-.02em', marginTop: 2 }}>
+        {TITLE[u]}{p?.sell_percent_now ? ` ${p.sell_percent_now}%` : ''}
+      </div>
+      <div style={{ fontSize: 12, color: muted, marginTop: 4, lineHeight: 1.4 }}>{p?.reasons?.[0] ?? p?.headline ?? 'Carregando o plano…'}</div>
     </div>
-    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
-      <span>Preço <b>{price(p?.current_price_usd)}</b></span>
-      <span style={{ color: (p?.change_from_reference ?? 0) >= 0 ? '#16c75f' : '#e3262b', fontWeight: 700 }}>{pct(p?.change_from_reference)}</span>
+    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+      <span style={{ fontSize: 24, fontWeight: 600, letterSpacing: '-.02em', fontVariantNumeric: 'tabular-nums' }}>{price(cur)}</span>
+      <span style={{ fontSize: 14, fontWeight: 600, color: up ? '#10b981' : '#f43f5e', fontVariantNumeric: 'tabular-nums' }}>{pct(chg)}</span>
     </div>
-    {p?.stop && <div style={{ fontSize: 13, color: p.stop.reached ? '#e3262b' : '#a3aca7' }}>Stop {price(p.stop.price_usd)} ({pct(p.stop.change_from_now)} daqui){p.stop.reached ? ' · ATINGIDO' : ''}</div>}
-    {p?.take_profits?.slice(0, 2).map(t => <div key={t.label} style={{ fontSize: 13, color: '#a3aca7' }}>{t.label}: {price(t.price_usd)} ({pct(t.change_from_now)}) → vender {t.sell_percent}%</div>)}
-    <div style={{ fontSize: 12, color: '#a3aca7', lineHeight: 1.35 }}>{p?.headline}{p?.reasons?.[0] ? ` · ${p.reasons[0]}` : ''}</div>
-    <button onClick={() => openAxiom(address)} style={{ marginTop: 4, background: '#16c75f', color: '#03130a', border: 0, borderRadius: 8, padding: '8px', fontWeight: 700, cursor: 'pointer' }}>Abrir na Axiom</button>
+    {pos != null && <div>
+      <div style={{ height: 6, borderRadius: 6, background: 'linear-gradient(90deg,#f43f5e33,#27272a 40%,#10b98133)', position: 'relative' }}>
+        <i style={{ position: 'absolute', left: `calc(${pos * 100}% - 5px)`, top: -2, width: 10, height: 10, borderRadius: 10, background: '#fafafa', boxShadow: '0 0 0 3px #09090b' }} />
+      </div>
+      <div style={{ ...row, marginTop: 6, color: faint, fontSize: 11 }}><span>Stop {price(stop)}</span><span>Alvo {price(tgt)}</span></div>
+    </div>}
+    <div style={{ borderTop: `1px solid ${line}`, paddingTop: 10, display: 'grid', gap: 6 }}>
+      {p?.stop && <div style={row}><span style={{ color: muted }}>Stop{p.stop.reached ? ' · atingido' : ''}</span><span style={{ color: p.stop.reached ? '#f43f5e' : '#fafafa', fontVariantNumeric: 'tabular-nums' }}>{pct(p.stop.change_from_now)}</span></div>}
+      {p?.take_profits?.slice(0, 2).map(t => <div key={t.label} style={row}><span style={{ color: muted }}>{t.label} · vender {t.sell_percent}%</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{pct(t.change_from_now)}</span></div>)}
+    </div>
+    <button onClick={() => openAxiom(address)} style={{ marginTop: 'auto', background: '#fafafa', color: '#09090b', border: 0, borderRadius: 10, padding: '10px', fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Abrir na Axiom ↗</button>
   </div>
 }
 
@@ -70,13 +94,26 @@ export function floatingSupported() {
   return !!pip()
 }
 
+function popupFallback(chainId: string, address: string, symbol: string) {
+  // Plano B: janela pequena comum (não fica por cima sozinha, mas atualiza ao vivo).
+  const url = `/flutuante/${encodeURIComponent(chainId)}/${encodeURIComponent(address)}?s=${encodeURIComponent(symbol)}`
+  return !!window.open(url, 'mcai-venda', 'popup,width=340,height=420')
+}
+
 export async function openFloating(chainId: string, address: string, symbol: string) {
   const api = pip()
-  if (!api) return false
-  current?.win.close()
-  const win = await api.requestWindow({ width: 330, height: 300 })
+  if (!api) return popupFallback(chainId, address, symbol)
+  let win: Window
+  try {
+    const pending = api.requestWindow({ width: 320, height: 380 })  // pedido antes de qualquer await: precisa do clique do usuário
+    current?.win.close()
+    win = await pending
+  } catch {
+    return popupFallback(chainId, address, symbol)
+  }
   win.document.title = `Venda · ${symbol}`
   win.document.body.style.margin = '0'
+  win.document.body.style.background = '#09090b'
   const host = win.document.createElement('div')
   win.document.body.appendChild(host)
   const root = createRoot(host)
@@ -86,8 +123,13 @@ export async function openFloating(chainId: string, address: string, symbol: str
   return true
 }
 
+/** Página da janela comum (plano B): /flutuante/:chainId/:address */
+export function FloatingPage({ chainId, address, symbol }: { chainId: string; address: string; symbol: string }) {
+  useEffect(() => { document.title = `Venda · ${symbol}` }, [symbol])
+  return <FloatingView chainId={chainId} address={address} symbol={symbol} win={window} />
+}
+
 export function FloatingSellButton({ chainId, address, symbol, className }: { chainId: string; address: string; symbol: string; className?: string }) {
-  if (!floatingSupported()) return null
   return <button type="button" className={className} title="Fica por cima de tudo, até quando você der Alt+Tab para a Axiom"
     onClick={() => void openFloating(chainId, address, symbol)}>Janela flutuante de venda</button>
 }

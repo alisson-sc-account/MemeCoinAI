@@ -750,6 +750,20 @@ class FlowOut(Out):
     sells: int
 
 
+class SmartConfirmationOut(Out):
+    """Carteiras que costumam acertar comprando agora. Só apoio: `influences_signal` é sempre false."""
+    state: Literal["confirmed_secondary", "weak_confirmation", "no_confirmation", "insufficient_data", "expired", "unsupported_source"]
+    wallets: int
+    usd: float
+    known_smart: int
+    top_share: float | None
+    last_buy_age_seconds: float | None
+    window_minutes: int
+    rules_version: str
+    influences_signal: bool
+    explanation: str
+
+
 class ExitPlanOut(Out):
     version: str
     urgency: Literal["sell_now", "reduce", "hold", "no_data"]
@@ -768,6 +782,7 @@ class ExitPlanOut(Out):
     freshness: Freshness
     live: LiveFeedOut
     flow: FlowOut | None = None
+    smart_confirmation: SmartConfirmationOut | None = None
     generated_at: UTCdt
     disclaimer: str
 

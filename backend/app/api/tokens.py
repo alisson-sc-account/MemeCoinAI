@@ -20,7 +20,8 @@ from app.api.views import (
     tracked_list_items,
 )
 from app.db import get_db, utcnow
-from app.engine import checks, exit_plan, outcomes
+from app.config import get_settings
+from app.engine import checks, exit_plan, outcomes, smart_confirm
 from app.engine.pipeline import analyze_token
 from app.engine.signals import advise
 from app.engine.slippage import DEFAULT_POSITIONS_USD, estimate_exit
@@ -252,18 +253,26 @@ def _exit_estimate(db: Session, t: Token, src: str, positions) -> ExitEstimateOu
     return ExitEstimateOut(**est, freshness=freshness(snap.received_at if snap else None, src))
 
 
+@router.post("/{chain_id}/{address}/watch", status_code=204, dependencies=[Depends(current_user)])
+def token_watch(chain_id: str, address: str, db: Session = Depends(get_db)):
+    """Avisa que o quadro deste token está aberto: a atualização rápida o acompanha por mais um pouco.
+
+    A tela chama a cada ~2 s enquanto está aberta e visível; fechou, para sozinho (TTL). A gravação é
+    no máximo 1 a cada 2 s por moeda. Banco ocupado responde 503 (não finge que gravou).
+    """
+    t = _get_token(db, chain_id, address)
+    live.request_watch(db, t.id)
+    return Response(status_code=204)
+
+
 @router.get("/{chain_id}/{address}/exit-plan", response_model=ExitPlanOut)
 def token_exit_plan(chain_id: str, address: str, db: Session = Depends(get_db), user: User = Depends(current_user)):
     """Quando e quanto vender (regras `exit-1`) com o preço da atualização rápida (`app.live`).
 
-    Cada consulta mantém o token na lista da atualização rápida por mais 60 s. Sem cotação
+    Só lê: quem mantém o token na atualização rápida é o POST `/watch` da tela aberta. Sem cotação
     rápida recente, usa o snapshot do coletor e diz isso em `live`.
     """
     t = _get_token(db, chain_id, address)
-    try:
-        live.request_watch(db, t.id)
-    except OperationalError:
-        db.rollback()  # banco ocupado: o pedido entra na próxima consulta, o plano sai mesmo assim
     feed = live.feed(db, t)
     flow = tape_store.read_flow(t.id)
     src = source_status(db, dexscreener.SOURCE_NAME)["status"]
@@ -283,7 +292,12 @@ def token_exit_plan(chain_id: str, address: str, db: Session = Depends(get_db), 
     estimates = outcomes.estimate(db, a.opportunity_score, a.risk_score) if a else []
     adv = advise(sig, pos, price, None, user)
     plan = exit_plan.build(price, snap.liquidity_usd if snap else None, a, sig, pos, estimates, adv, alerts, peak)
-    return ExitPlanOut(**plan, has_position=pos is not None, freshness=observed, live=feed, flow=flow, generated_at=utcnow())
+    smart = None
+    if get_settings().smart_wallet_shadow:
+        pair = db.get(Pair, t.primary_pair_id) if t.primary_pair_id else None
+        smart = smart_confirm.evaluate(t.id, pair.dex_id if pair else None)
+    return ExitPlanOut(**plan, has_position=pos is not None, freshness=observed, live=feed, flow=flow, generated_at=utcnow(),
+                       smart_confirmation=smart)
 
 
 @router.get("/{chain_id}/{address}/security", response_model=SecurityOut)

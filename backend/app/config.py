@@ -88,6 +88,9 @@ class Settings(BaseSettings):
     ntfy_enabled: bool = True  # aviso no celular, grátis e sem conta (app/notify.py)
     tape_alerts_enabled: bool = False  # em observação: na prova ficou bem abaixo do disparo pela coleta
     security_gate: bool = True  # compra forte exige verificação de segurança limpa
+    # Carteiras que costumam acertar: só observação (mostra e registra no instante do sinal; nunca muda o sinal).
+    # false desliga tudo. Não existe chave de "peso": influência só depois de provar valor (ver smart_confirm).
+    smart_wallet_shadow: bool = True
     jupiter_price_base_url: str = "https://lite-api.jup.ag"
     solana_rpc_url: str = "https://api.mainnet-beta.solana.com"
     http_timeout_seconds: float = 15.0

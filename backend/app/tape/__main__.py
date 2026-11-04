@@ -4,11 +4,13 @@ import json
 import logging
 import signal
 import time
+from collections import OrderedDict
 
 import websockets
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 
-from app import agents
+from app import agents, metrics
 from app.api.views import latest_snapshots
 from app.config import BACKEND_DIR, get_settings
 from app.db import session_factory, utcnow
@@ -32,6 +34,7 @@ BEAT_EVERY = 30.0
 NEW_TOKEN_TRADES = 8  # pump.fun fora da lista com 8 negociações em 5 min entra para acompanhar
 NEW_TOKENS_PER_MINUTE = 30
 SOL_QUOTES = {"SOL", "WSOL"}
+SEEN_SIGNATURES = 20_000  # memória limitada para descartar transação repetida
 _running = True
 
 
@@ -103,8 +106,13 @@ def _add_new_tokens(mints: list[str]) -> int:
         added = 0
         for mint in mints:
             if mint not in known and tracked + added < s.max_tracked_tokens:
-                db.add(Token(chain_id="solana", address=mint, discovered_via="tape", first_seen_at=utcnow()))
-                added += 1
+                # O coletor pode ter achado a mesma moeda no mesmo instante: perde só esta, não o lote inteiro.
+                try:
+                    with db.begin_nested():
+                        db.add(Token(chain_id="solana", address=mint, discovered_via="tape", first_seen_at=utcnow()))
+                    added += 1
+                except IntegrityError:
+                    pass
         db.commit()
         return added
     finally:
@@ -136,12 +144,26 @@ class Tape:
         self.seen = 0
         self.matched = 0
         self.smart_rows: list[tuple] = []
+        self.duplicates = 0
+        self._recent: OrderedDict[str, None] = OrderedDict()
+
+    def _seen_before(self, signature: str | None) -> bool:
+        """A mesma transação chega 2 vezes quando cita os 2 programas assinados (pump.fun e PumpSwap)."""
+        if not signature:
+            return False
+        if signature in self._recent:
+            self.duplicates += 1
+            return True
+        self._recent[signature] = None
+        if len(self._recent) > SEEN_SIGNATURES:
+            self._recent.popitem(last=False)
+        return False
 
     def handle(self, raw: str, now: float, loop) -> None:
         if not any(mark in raw for mark in QUICK_MARKS):
             return
         value = ((json.loads(raw).get("params") or {}).get("result") or {}).get("value") or {}
-        if value.get("err"):
+        if value.get("err") or self._seen_before(value.get("signature")):
             return
         for trade in decode_logs(value.get("logs") or []):
             self.seen += 1
@@ -203,6 +225,8 @@ async def _periodic(tape: Tape) -> None:
                     log.info("novas moedas pelas negociações: %d", added)
                 next_new = now + 60
             if now >= next_beat:
+                metrics.gauge("tape.trades_period", tape.seen - last_seen)
+                metrics.gauge("tape.duplicates_total", tape.duplicates)
                 await loop.run_in_executor(None, _beat, BEAT_EVERY, tape.seen - last_seen, None if tape.seen > last_seen else "sem negociações recebidas")
                 log.info("negociações: %d no período, %d de moedas acompanhadas", tape.seen - last_seen, tape.matched)
                 last_seen = tape.seen
@@ -229,6 +253,7 @@ async def _stream(tape: Tape) -> None:
                     tape.handle(raw, time.time(), loop)
         except Exception as exc:
             log.warning("fluxo caiu (%s); nova tentativa em %.0f s", type(exc).__name__, backoff)
+            metrics.incr("tape.reconnects")
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 120.0)
 
@@ -245,6 +270,7 @@ def _stop(*_):
 
 def main() -> None:
     setup_logging()
+    metrics.init("tape")
     lock = WorkerLock(BACKEND_DIR / "data" / "tape.lock")
     try:
         lock.acquire()

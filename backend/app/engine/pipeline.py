@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import metrics
 from app.models import SecurityReport
 from app.safety.service import apply_to_decision, detect_rug
 from app.engine.scoring import Factor, risk_level
@@ -176,6 +177,9 @@ def analyze_token(db: Session, token: Token, as_of: datetime | None = None, forc
     if detected and fresh_enough(features) and not token.rugged_at:
         stats = burst.pattern_stats(db, as_of)
         extreme = detected["strength"] == "extreme"
+        if snap is not None:
+            log.info("disparo corr=s%s/a%s token=%s forca=%s recebido=%s atraso_ms=%.0f", snap.id, analysis.id, token.id,
+                     detected["strength"], snap.received_at.isoformat(), (utcnow() - snap.received_at).total_seconds() * 1000)
         candidates.append(AlertCandidate(
             "pump_burst", "critical" if extreme else "high",
             "Disparo agora: alta forte em andamento" if extreme else "Disparo agora: volume e compras acelerando",
@@ -191,7 +195,16 @@ def analyze_token(db: Session, token: Token, as_of: datetime | None = None, forc
     if get_settings().security_gate:
         report = db.get(SecurityReport, token.id)
         decision = apply_to_decision(decision, report.verdict if report else None)
-    sig, _ = signals.upsert_signal(db, token.id, analysis, decision, estimates, features.get("price_usd"))
+    sig, created = signals.upsert_signal(db, token.id, analysis, decision, estimates, features.get("price_usd"))
+    decided = utcnow()
+    if snap is not None:
+        # Atraso dado recebido -> decisão. A correlação é a cadeia de IDs já gravada: snapshot -> análise -> sinal.
+        lag_ms = (decided - snap.received_at).total_seconds() * 1000
+        metrics.observe("pipeline.received_to_decision", lag_ms)
+        if created and sig.action in ("buy", "sell"):
+            metrics.observe("signal.received_to_decision", lag_ms)
+            log.info("sinal corr=s%s/a%s/g%s token=%s acao=%s/%s recebido=%s decidido=%s atraso_ms=%.0f", snap.id, analysis.id,
+                     sig.id, token.id, sig.action, sig.strength, snap.received_at.isoformat(), decided.isoformat(), lag_ms)
     sig_alert = signals.alert_for(sig)
     if sig_alert:
         candidates.append(sig_alert)
@@ -217,7 +230,9 @@ def analyze_tokens(db: Session, token_ids: set[int] | list[int], as_of: datetime
         if tok is None:
             continue
         try:
-            if analyze_token(db, tok, as_of) is not None:
+            with metrics.timer("pipeline.analyze"):
+                done = analyze_token(db, tok, as_of)
+            if done is not None:
                 n += 1
         except Exception:
             db.rollback()

@@ -13,6 +13,8 @@ from typing import Any
 
 import httpx
 
+from app import metrics
+
 log = logging.getLogger(__name__)
 
 
@@ -59,6 +61,7 @@ class ResilientClient:
             transport=transport,
             headers={"Accept": "application/json", "User-Agent": "MemeCoinAI/0.1"},
         )
+        self._host = httpx.URL(base_url).host or "local"
         self.max_attempts = max_attempts
         self.backoff_base = backoff_base
         self._sleep = sleep
@@ -80,15 +83,18 @@ class ResilientClient:
                 resp = self._client.request(method, path, **kwargs)
             except httpx.HTTPError as exc:
                 result.latencies.append((time.perf_counter() - t0) * 1000)
+                metrics.incr(f"http.{self._host}.{'timeout' if isinstance(exc, httpx.TimeoutException) else 'error'}")
                 result.error = f"{type(exc).__name__}: {exc}"
                 log.warning("http error %s %s (tentativa %d): %s", method, path, attempt, result.error)
                 self._backoff(attempt)
                 continue
             elapsed = (time.perf_counter() - t0) * 1000
+            metrics.observe(f"http.{self._host}", elapsed)
             result.latencies.append(elapsed)
             result.latency_ms = elapsed
             result.status_code = resp.status_code
             if resp.status_code == 429:
+                metrics.incr(f"http.{self._host}.429")
                 result.rate_limited = True
                 result.error = "rate limited (HTTP 429)"
                 retry_after = _parse_retry_after(resp.headers.get("Retry-After"))

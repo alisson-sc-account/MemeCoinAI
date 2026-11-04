@@ -121,6 +121,10 @@ def isolated_db(tmp_path, monkeypatch):
     from app.tape import store as tape_store
 
     monkeypatch.setattr(tape_store, "tape_path", lambda: tmp_path / "tape.db")
+    from app import metrics
+
+    metrics.reset()
+    metrics.set_folder(tmp_path / "metrics")  # teste nunca grava medição no data/ real
 
     class _NoGecko:  # teste nunca chama rede; a descoberta pelo GeckoTerminal tem teste próprio
         def pools(self, *_):

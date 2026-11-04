@@ -9,6 +9,7 @@ import logging
 import signal
 import time
 
+from app import metrics
 from app.config import BACKEND_DIR, get_settings
 from app.db import session_factory
 from app.live import service
@@ -41,6 +42,7 @@ def _with_session(fn):
 
 def main() -> None:
     setup_logging()
+    metrics.init("live")
     lock = WorkerLock(BACKEND_DIR / "data" / "live.lock")
     try:
         lock.acquire()
@@ -73,7 +75,8 @@ def _run() -> None:
                 tokens = service.watched_tokens(db)
                 known.clear()
                 known.update(t.id for t in tokens)
-                return service.tick(db, client, tokens)
+                with metrics.timer("live.full_tick"):
+                    return service.tick(db, client, tokens)
             r = _with_session(full)
             if r and (r["watched"] or r["errors"]):
                 log.info("ciclo rápido: %s", r)
@@ -93,7 +96,11 @@ def _run() -> None:
         if now >= next_focus:
             def fast(db):
                 tokens = service.focused_tokens(db)
-                return focus.tick(db, tokens) if tokens else None
+                if not tokens:
+                    return None
+                metrics.gauge("live.focused", len(tokens))
+                with metrics.timer("live.focus_tick"):
+                    return focus.tick(db, tokens)
             r = _with_session(fast)
             # RPC negou: recua um pouco em vez de insistir.
             next_focus = time.monotonic() + (3.0 if r and r["error"] else 1.0)

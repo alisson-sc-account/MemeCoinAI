@@ -17,10 +17,11 @@ from sqlalchemy import select
 from app import agents, notify
 from app.config import BACKEND_DIR, get_settings
 from app.db import session_factory
-from app.engine import burst, checks, outcomes
+from app.engine import burst, checks, outcomes, smart_confirm
 from app.engine.pipeline import analyze_tokens, sync_source_alerts
 from app.engine.predict import evaluate_due
 from app.ingest.service import apply_raw_retention, apply_snapshot_retention, compact_old_snapshots, discover, prune_inactive, refresh_tracked, scout, split_hot_cold
+from app import metrics
 from app.logging_setup import setup_logging
 from app.worker_lock import WorkerAlreadyRunning, WorkerLock
 from app.models import Token
@@ -51,10 +52,12 @@ def run_job(name: str, fn, interval: float = 60.0) -> None:
         result = fn(db)
         items = next((v for v in (result or {}).values() if isinstance(v, int)), 0) if isinstance(result, dict) else 0
         log.info("job=%s ok duração=%.1fs resultado=%s", name, time.perf_counter() - t0, result)
+        metrics.observe(f"job.{name}", (time.perf_counter() - t0) * 1000)
     except Exception as exc:
         db.rollback()
         error = f"{type(exc).__name__}: {exc}"[:300]
         log.exception("job=%s falhou", name)
+        metrics.incr(f"job.{name}.error")
     finally:
         try:
             if name != ANALYSIS_AGENT or error or time.monotonic() - _analysis_beat[0] > 10:
@@ -71,35 +74,54 @@ class AnalysisQueue:
 
     Separar da coleta faz a rede não esperar a CPU. Uma moeda quente com dado novo passa na frente de
     centenas de frias, que é o que mantém o disparo rápido mesmo com milhares de moedas.
+
+    O limite é natural: no máximo uma entrada por moeda (a mesma moeda entrando de novo só junta ao pedido que já
+    espera, e a análise sempre lê o dado mais novo do banco), então a fila nunca passa do número de moedas
+    acompanhadas. Guarda a hora da 1ª entrada para medir a espera real.
     """
 
-    def __init__(self):
+    def __init__(self, clock=time.monotonic):
         self._lock = threading.Lock()
-        self._hot: dict[int, None] = {}
-        self._cold: dict[int, None] = {}
+        self._clock = clock
+        self._hot: dict[int, float] = {}
+        self._cold: dict[int, float] = {}
+        self.coalesced = 0
 
     def add(self, ids, hot: bool) -> None:
+        now = self._clock()
         with self._lock:
             for i in ids:
                 if hot:
-                    self._cold.pop(i, None)
-                    self._hot[i] = None
-                elif i not in self._hot:
-                    self._cold[i] = None
+                    since = self._cold.pop(i, None)
+                    if i in self._hot:
+                        self.coalesced += 1
+                    else:
+                        self._hot[i] = since if since is not None else now
+                elif i in self._hot or i in self._cold:
+                    self.coalesced += 1
+                else:
+                    self._cold[i] = now
 
     def take(self, n: int) -> list[int]:
+        now = self._clock()
         with self._lock:
             out = []
-            for pool in (self._hot, self._cold):
+            for label, pool in (("hot", self._hot), ("cold", self._cold)):
                 while pool and len(out) < n:
                     i = next(iter(pool))
-                    del pool[i]
+                    metrics.observe(f"queue.wait.{label}", (now - pool.pop(i)) * 1000)
                     out.append(i)
             return out
 
     def sizes(self) -> tuple[int, int]:
         with self._lock:
             return len(self._hot), len(self._cold)
+
+    def oldest_age(self) -> tuple[float, float]:
+        """Segundos de espera do item mais antigo (quente, fria); 0 se vazia."""
+        now = self._clock()
+        with self._lock:
+            return tuple(round(now - next(iter(p.values())), 1) if p else 0.0 for p in (self._hot, self._cold))
 
 
 class Radar:
@@ -126,13 +148,21 @@ _radar = Radar()
 _scout_turn = itertools.count()
 _cold_ids: set[int] = set()
 _hot_busy = threading.Event()
+_hot_idle = threading.Event()  # o contrário de _hot_busy: a fria acorda na hora em que a quente termina
+_hot_idle.set()
 
 
 def _yield_to_hot() -> None:
-    """Todos dividem o limite do DEX Screener: a fria espera enquanto a quente busca, para o disparo não atrasar."""
-    deadline = time.monotonic() + 60
-    while _hot_busy.is_set() and time.monotonic() < deadline:
-        time.sleep(0.2)
+    """Todos dividem o limite do DEX Screener: a fria espera enquanto a quente busca, para o disparo não atrasar.
+
+    Espera o aviso de "quente terminou" em vez de conferir a cada 0,2 s; o teto de 60 s garante que a fria
+    nunca fica parada para sempre (sem fome).
+    """
+    if not _hot_busy.is_set():
+        return
+    t0 = time.monotonic()
+    _hot_idle.wait(timeout=60)
+    metrics.observe("cold.yield_wait", (time.monotonic() - t0) * 1000)
 
 
 def job_market_hot(db):
@@ -140,11 +170,13 @@ def job_market_hot(db):
     hot, cold = split_hot_cold(db, _radar.active())
     budget = get_settings().refresh_cold_requests_per_cycle * MAX_ADDRESSES_PER_REQUEST
     _cold_ids = {t.id for t in cold[:budget]}  # o agente frio pega a mesma fatia, sem repetir as quentes
+    _hot_idle.clear()
     _hot_busy.set()
     try:
         touched = refresh_tracked(db, tokens=hot)
     finally:
         _hot_busy.clear()
+        _hot_idle.set()
     _queue.add(touched, hot=True)
     sync_source_alerts(db, (dexscreener.SOURCE_NAME,))
     return {"tokens": len(hot), "new_data": len(touched)}
@@ -164,7 +196,14 @@ def job_analysis(db):
         return {"analyzed": 0}
     with _analysis_lock:
         analyzed = analyze_tokens(db, ids)
-    return {"analyzed": analyzed, "hot_waiting": _queue.sizes()[0], "cold_waiting": _queue.sizes()[1]}
+    hot_n, cold_n = _queue.sizes()
+    hot_age, cold_age = _queue.oldest_age()
+    metrics.gauge("queue.hot_size", hot_n)
+    metrics.gauge("queue.cold_size", cold_n)
+    metrics.gauge("queue.hot_oldest_s", hot_age)
+    metrics.gauge("queue.cold_oldest_s", cold_age)
+    metrics.gauge("queue.coalesced_total", _queue.coalesced)
+    return {"analyzed": analyzed, "hot_waiting": hot_n, "cold_waiting": cold_n}
 
 
 def job_scout(db):
@@ -196,7 +235,8 @@ def job_checks(db):
 
 
 def job_evaluate(db):
-    result = {"evaluated": evaluate_due(db), "outcomes_labeled": outcomes.label_due(db)}
+    result = {"evaluated": evaluate_due(db), "outcomes_labeled": outcomes.label_due(db),
+              "smart_shadow": smart_confirm.shadow_job(db)}
     burst.clear_cache()  # estatística do padrão de disparo usa os rótulos novos
     return result
 
@@ -207,6 +247,7 @@ def job_retention(db):
 
 def main() -> None:
     setup_logging()
+    metrics.init("worker")
     s = get_settings()
     lock = WorkerLock(BACKEND_DIR / "data" / "worker.lock")
     try:

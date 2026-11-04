@@ -154,7 +154,9 @@ def test_exit_plan_uses_live_price_and_registers_watch(auth_client, fake_dex, db
     auth_client.post(f"{API}/tokens/track", json={"chain_id": "solana", "address": SOL_MINT})
     j = auth_client.get(f"{API}/tokens/solana/{SOL_MINT}/exit-plan").json()
     assert j["live"]["status"] == "off" and j["freshness"]["source"] == "dexscreener"  # sem serviço: coletor
-    token = db.query(LiveWatch).one()  # o pedido do quadro entrou na lista
+    assert db.query(LiveWatch).count() == 0  # GET só lê: não grava nada
+    assert auth_client.post(f"{API}/tokens/solana/{SOL_MINT}/watch").status_code == 204
+    token = db.query(LiveWatch).one()  # o aviso da tela aberta entrou na lista
     live.beat(db, interval=10)
     db.add(LiveQuote(token_id=token.token_id, source="jupiter_price", received_at=utcnow(), price_usd=0.0000050,
                      liquidity_usd=1.0))
@@ -166,7 +168,7 @@ def test_exit_plan_uses_live_price_and_registers_watch(auth_client, fake_dex, db
 
 def test_exit_plan_sells_everything_on_live_rug(auth_client, fake_dex, db):
     auth_client.post(f"{API}/tokens/track", json={"chain_id": "solana", "address": SOL_MINT})
-    auth_client.get(f"{API}/tokens/solana/{SOL_MINT}/exit-plan")
+    auth_client.post(f"{API}/tokens/solana/{SOL_MINT}/watch")
     token_id = db.query(LiveWatch).one().token_id
     live.beat(db, interval=10)
     for ago, price, liq in ((90, 1.0, 600_000), (70, 1.0, 600_000), (50, 1.0, 600_000), (15, 0.02, 60_000), (5, 0.02, 59_000)):

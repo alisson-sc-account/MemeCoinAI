@@ -50,6 +50,7 @@ export const apiClient = {
   addFavorite: (chain_id: string, address: string, signal_id: number | null) => api<Favorite>('/favorites', { method: 'POST', body: JSON.stringify({ chain_id, address, signal_id }) }),
   removeFavorite: (id: number) => api<void>(`/favorites/${id}`, { method: 'DELETE' }),
   accuracy: (query: string) => api<AccuracyPage>(`/accuracy${query ? `?${query}` : ''}`),
+  watch: (chain: string, address: string) => api<void>(`/tokens/${encodeURIComponent(chain)}/${encodeURIComponent(address)}/watch`, { method: 'POST' }),
   exitPlan: (chain: string, address: string) => api<ExitPlan>(`/tokens/${encodeURIComponent(chain)}/${encodeURIComponent(address)}/exit-plan`),
   opportunities: (query: string) => api<OpportunityPage>(`/opportunities${query ? `?${query}` : ''}`),
   registry: () => api<SourceRegistryEntry[]>('/system/registry'),

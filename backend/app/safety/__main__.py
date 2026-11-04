@@ -25,6 +25,8 @@ def _stop(*_):
 
 def main() -> None:
     setup_logging()
+    from app import metrics
+    metrics.init("safety")
     lock = WorkerLock(BACKEND_DIR / "data" / "security.lock")
     try:
         lock.acquire()

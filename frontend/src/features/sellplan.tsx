@@ -27,6 +27,20 @@ function whatToDoNow(urgency: string, percent: number | null | undefined, reason
   return { title: `Venda ${percent}% agora`, detail: reasons[0] ?? `Guarde o resto.` }
 }
 
+export const WATCH_EVERY_MS = 2_000
+
+/** Diz ao backend que o quadro está aberto (a pista rápida acompanha a moeda). Só com a aba visível; parou, expira sozinho. */
+export function useLiveWatch(chainId: string, address: string) {
+  useEffect(() => {
+    if (!chainId || !address) return
+    const ping = () => { if (document.visibilityState === 'visible') apiClient.watch(chainId, address).catch(() => undefined) }
+    ping()
+    const id = window.setInterval(ping, WATCH_EVERY_MS)
+    document.addEventListener('visibilitychange', ping)
+    return () => { window.clearInterval(id); document.removeEventListener('visibilitychange', ping) }
+  }, [chainId, address])
+}
+
 function useNow(ms = 1000) {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => { const id = window.setInterval(() => setNow(Date.now()), ms); return () => window.clearInterval(id) }, [ms])
@@ -47,6 +61,7 @@ export function SellPlanPanel({ chainId, address, plan, pending, error, sharedQu
     queryKey: ['exit-plan', chainId, address], queryFn: () => apiClient.exitPlan(chainId, address),
     refetchInterval: nextPollMs(), refetchIntervalInBackground: false, enabled: !sharedQuery,
   })
+  useLiveWatch(chainId, address)
   const now = useNow()
   const p = sharedQuery ? plan : q.data
   const isPending = sharedQuery ? pending : q.isPending

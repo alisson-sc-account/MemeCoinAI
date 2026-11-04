@@ -8,12 +8,14 @@ Não vai saldo, posição nem nada pessoal: só nome da moeda, motivo e link pú
 import logging
 import secrets
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app import metrics
 from app.config import BACKEND_DIR, get_settings
 from app.models import Alert, Signal, Token
 
@@ -82,6 +84,15 @@ def _dex_link(token: Token) -> str:
     return f"https://dexscreener.com/{token.chain_id}/{token.address}"
 
 
+def _measure(kind: str, item_id: int, analysis_id: int | None, token_id: int, decided_at) -> None:
+    """Atraso decisão -> aviso enviado, com a mesma correlação do log do motor (a<análise>)."""
+    if decided_at is None:
+        return
+    lag = (datetime.now(UTC) - decided_at).total_seconds() * 1000
+    metrics.observe(f"notify.decision_to_send.{kind}", lag)
+    log.info("aviso corr=a%s/%s%s token=%s atraso_ms=%.0f", analysis_id, kind[0], item_id, token_id, lag)
+
+
 def run_once(db: Session, client: httpx.Client | None = None) -> int:
     """Envia o que surgiu desde a última volta. Ao ligar, só marca onde está: não repete aviso antigo."""
     if not get_settings().ntfy_enabled:
@@ -98,9 +109,15 @@ def run_once(db: Session, client: httpx.Client | None = None) -> int:
     for a in alerts:
         token = db.get(Token, a.token_id) if a.token_id else None
         if token and not token.rugged_at and _fresh_for(token.id):
-            sent += send(f"DISPARO {token.symbol or ''}".strip(), a.reason, _dex_link(token), client)
+            ok = send(f"DISPARO {token.symbol or ''}".strip(), a.reason, _dex_link(token), client)
+            sent += ok
+            if ok:
+                _measure("alert", a.id, a.analysis_id, token.id, a.detected_at)
     for s in signals:
         token = db.get(Token, s.token_id)
         if token and not token.rugged_at and _fresh_for(token.id):
-            sent += send(f"COMPRA FORTE {token.symbol or ''}".strip(), s.headline, _dex_link(token), client)
+            ok = send(f"COMPRA FORTE {token.symbol or ''}".strip(), s.headline, _dex_link(token), client)
+            sent += ok
+            if ok:
+                _measure("signal", s.id, s.analysis_id, token.id, s.created_at)
     return sent

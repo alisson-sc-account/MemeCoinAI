@@ -56,8 +56,24 @@ export default function PriceChart({ points, range, downsampled, live, fallbackP
     })
   }, [live?.observed_at, live?.price_usd, live?.status])
 
-  const candles = useMemo(() => buildCandles(points, livePoints, range), [points, livePoints, range])
-  const sim = useMemo(() => coinSimulation(simulation?.entry_price_usd ?? null, currentPrice), [simulation?.entry_price_usd, currentPrice])
+  // Histórico com buraco (sistema desligado) e preço ao vivo de outra fonte geravam uma vela solta lá no alto:
+  // só junta o ao vivo quando o histórico é recente.
+  const lastAt = points.length ? Date.parse(points[points.length - 1].t) : 0
+  const historyFresh = points.length === 0 || Date.now() - lastAt < 30 * 60_000
+  const allCandles = useMemo(() => buildCandles(points, historyFresh ? livePoints : [], range), [points, livePoints, range, historyFresh])
+  // O eixo do tempo não mostra buracos: horas com o sistema desligado viravam um degrau falso entre duas velas.
+  // Mostra só o trecho contínuo mais recente e avisa que há um buraco.
+  const gapAt = useMemo(() => {
+    for (let i = allCandles.length - 1; i > 0; i--) if (Number(allCandles[i].time) - Number(allCandles[i - 1].time) > 30 * 60) return i
+    return 0
+  }, [allCandles])
+  const candles = useMemo(() => allCandles.slice(gapAt), [allCandles, gapAt])
+  // Sem sinal de compra, conta desde que a moeda foi aberta: o lucro sempre aparece subindo ou descendo ao vivo.
+  const openedRef = useRef<{ price: number; at: string } | null>(null)
+  if (!openedRef.current && currentPrice) openedRef.current = { price: currentPrice, at: new Date().toISOString() }
+  const entryPrice = simulation?.entry_price_usd ?? openedRef.current?.price ?? null
+  const entryAt = simulation?.signal_at ?? openedRef.current?.at ?? null
+  const sim = useMemo(() => coinSimulation(entryPrice, currentPrice), [entryPrice, currentPrice])
   const scalePrice = candles.at(-1)?.close ?? currentPrice
 
   useEffect(() => {
@@ -70,7 +86,7 @@ export default function PriceChart({ points, range, downsampled, live, fallbackP
       width: Math.max(el.clientWidth, 1), height: 360,
       layout: { background: { color: color('--surface-1', '#111111') }, textColor: color('--text-muted', '#a3a3a3'), fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: 11 },
       grid: { vertLines: { visible: false }, horzLines: { color: line } },
-      rightPriceScale: { borderColor: line, scaleMargins: { top: 0.08, bottom: 0.08 } },
+      rightPriceScale: { borderColor: line, mode: 1, scaleMargins: { top: 0.08, bottom: 0.08 } },  // escala logarítmica: alta forte não achata o resto
       timeScale: {
         borderColor: line, timeVisible: true, secondsVisible: false, barSpacing: 9, rightOffset: 4,
         tickMarkFormatter: ((time: Time) => formatChartTick(time, rangeRef.current)) as TickMarkFormatter,
@@ -150,27 +166,26 @@ export default function PriceChart({ points, range, downsampled, live, fallbackP
       <div role="img" aria-label={`Gráfico de candles do preço em dólares, ${candles.length} candles observados`}><div ref={container} className={styles.chart} style={candles.length ? undefined : { display: 'none' }}/></div>
       {candles.length === 0 && <div className={styles.emptyChart}>Sem histórico nesse intervalo.</div>}
       {downsampled && <p className={styles.chartNote}>Histórico amostrado pelo sistema.</p>}
+      {gapAt > 0 && <p className={styles.chartNote}>Mostrando desde {new Date(Number(candles[0]?.time) * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}: antes disso o sistema ficou sem coletar.</p>}
     </div>
 
     <aside className={styles.panel} aria-label="Simulação" aria-live="polite">
-      {simulation && sim ? <>
-        <small className={styles.meta}>Iniciou no sinal das <b>{clock(simulation.signal_at)}</b> ({coins} moedas)</small>
-        <small className={styles.meta}>{frozen ? 'Lucro congelado ao parar' : 'Lucro até agora'}</small>
-        {frozen ? <strong className={`${styles.pnl} ${(frozen.gain_at_favorite ?? 0) >= 0 ? styles.positive : styles.negative}`}>{percent(frozen.gain_at_favorite == null ? null : frozen.gain_at_favorite * 100)}</strong>
-          : <strong className={`${styles.pnl} ${good ? styles.positive : styles.negative}`}>{percent(sim.pnlPercent)}</strong>}
+      {sim && entryAt ? <>
+        <small className={styles.meta}>{simulation ? 'Iniciou no sinal das' : 'Sem sinal de compra: contando desde que abriu, às'} <b>{clock(entryAt)}</b> ({coins} moedas)</small>
+        <small className={styles.meta}>Lucro até agora</small>
+        <strong className={`${styles.pnl} ${good ? styles.positive : styles.negative}`}>{percent(sim.pnlPercent)}</strong>
         {chainId && address && (frozen
-          ? <Link to="/favoritados" className={styles.stopDone}>Salvo em Favoritados →</Link>
+          ? <Link to="/favoritados" className={styles.stopDone}>Salvo em Favoritados com {percent(frozen.gain_at_favorite == null ? null : frozen.gain_at_favorite * 100)} no clique →</Link>
           : <button type="button" className={styles.stopButton} disabled={stop.isPending} onClick={() => stop.mutate()}>{stop.isPending ? 'Salvando…' : 'Parar de contar'}</button>)}
         {stop.isError && <small className={styles.negative}>{(stop.error as Error).message}</small>}
         <div className={styles.metrics}>
           <div><small>Pagou</small><b>{price(sim.paid)}</b></div>
           <div><small>Vale agora</small><b>{price(sim.value)}</b></div>
-          <div><small>Preço na compra</small><b>{price(simulation.entry_price_usd)}</b></div>
+          <div><small>Preço na compra</small><b>{price(entryPrice)}</b></div>
           <div><small>Preço agora</small><b>{price(currentPrice)}</b></div>
         </div>
         <p className={styles.meta}>Com US$ 1.000 no mesmo sinal, teria agora <b className={good ? styles.positive : styles.negative}>{usd(sim.valueOf1000)}</b>.</p>
-      </> : simulation ? <p className={styles.meta}>Aguardando preço para calcular.</p>
-        : <p className={styles.meta}>Esta moeda ainda não teve sinal de compra. A simulação começa sozinha quando apitar.</p>}
+      </> : <p className={styles.meta}>Aguardando preço para calcular.</p>}
       <small className={styles.meta}>{currentAt ? `Atualizado ${ageText(currentAt, now)}` : 'Sem cotação agora'} · sem taxas nem slippage</small>
     </aside>
   </div>

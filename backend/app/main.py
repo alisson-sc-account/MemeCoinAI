@@ -2,6 +2,8 @@
 
 Todas as rotas ficam sob /api/v1. OpenAPI em /api/v1/openapi.json.
 """
+import os
+import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -10,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.exc import OperationalError
 
-from app import __version__
+from app import __version__, metrics
 from app.api import accuracy, alerts, auth, favorites, opportunities, predictions, signals, system, tokens
 from app.config import get_settings
 from app.logging_setup import setup_logging
@@ -20,6 +22,7 @@ API_PREFIX = "/api/v1"
 
 def create_app() -> FastAPI:
     setup_logging()
+    metrics.init(f"api-{os.getpid()}")  # 2 processos da API: cada um com o próprio arquivo
     s = get_settings()
     app = FastAPI(
         title="MemeCoinAI API", version=__version__,
@@ -30,6 +33,19 @@ def create_app() -> FastAPI:
             CORSMiddleware, allow_origins=s.cors_origin_list, allow_credentials=True,
             allow_methods=["GET", "POST", "PATCH", "DELETE"], allow_headers=["Content-Type"],
         )
+
+    @app.middleware("http")
+    async def timing(request: Request, call_next):
+        t0 = time.perf_counter()
+        response = await call_next(request)
+        route = request.scope.get("route")
+        path = getattr(route, "path", None)
+        if path and path.startswith(API_PREFIX):
+            name = f"api.{request.method} {path.removeprefix(API_PREFIX)}"
+            metrics.observe(name, (time.perf_counter() - t0) * 1000)
+            if response.status_code >= 500:
+                metrics.incr(f"{name}.5xx")
+        return response
 
     @app.exception_handler(HTTPException)
     async def http_error(_: Request, exc: HTTPException):

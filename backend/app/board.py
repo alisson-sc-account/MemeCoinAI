@@ -13,7 +13,7 @@ import sqlite3
 import time
 from pathlib import Path
 
-from app import agents
+from app import agents, metrics
 from app.config import BACKEND_DIR, get_settings
 from app.db import session_factory, utcnow
 from app.logging_setup import setup_logging
@@ -108,10 +108,14 @@ def build_once() -> int:
     t0 = time.perf_counter()
     db = session_factory()()
     try:
-        rows = _build_rows(db)
-        items = tracked_list_items(db)
-        dashboard = build_dashboard(db)
-        write_board(board_path(), rows, items, SORT_FIELDS, dashboard.model_dump_json(), TIER_ORDER)
+        with metrics.timer("board.rows"):  # partes medidas à parte: diz qual delas pesa no tempo total
+            rows = _build_rows(db)
+        with metrics.timer("board.items"):
+            items = tracked_list_items(db)
+        with metrics.timer("board.dashboard"):
+            dashboard = build_dashboard(db)
+        with metrics.timer("board.write"):
+            write_board(board_path(), rows, items, SORT_FIELDS, dashboard.model_dump_json(), TIER_ORDER)
         agents.beat(db, "board", PAUSE_SECONDS, items=len(rows), duration_ms=round((time.perf_counter() - t0) * 1000, 1), now=utcnow())
         return len(rows)
     finally:
@@ -125,6 +129,7 @@ def _stop(*_):
 
 def main() -> None:
     setup_logging()
+    metrics.init("board")
     lock = WorkerLock(BACKEND_DIR / "data" / "board.lock")
     try:
         lock.acquire()
@@ -139,6 +144,7 @@ def main() -> None:
             t0 = time.perf_counter()
             try:
                 n = build_once()
+                metrics.observe("board.build", (time.perf_counter() - t0) * 1000)
                 log.info("painel: %d moedas em %.1f s", n, time.perf_counter() - t0)
             except Exception:
                 log.exception("falha ao montar o painel")

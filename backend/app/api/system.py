@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from app import __version__, agents, board, notify
+from app import __version__, agents, board, metrics, notify
+from app.engine import smart_confirm
 from app.api.deps import current_user
 from app.api.views import build_list_items, token_link, token_ref
 from app.config import get_settings
@@ -63,6 +64,22 @@ def health(db: Session = Depends(get_db)):
 def system_agents(db: Session = Depends(get_db)):
     """Todos os agentes por categoria, com o estado de cada um."""
     return agents.status_list(db)
+
+
+@router.get("/system/metrics", dependencies=[Depends(current_user)])
+def system_metrics():
+    """Medições de cada processo (tempos com p50/p90/p95/p99 só com amostra suficiente, contadores e filas).
+
+    Cada processo grava o próprio resumo a cada ~10 s; processos parados há mais de 1 h não aparecem.
+    """
+    return {"processes": metrics.read_all(), "note": "Amostra = últimas 500 medições por nome, por processo. "
+            "Percentis nulos = amostra insuficiente (p50/p90: 20+, p95: 100+, p99: 300+)."}
+
+
+@router.get("/system/smart-wallets/shadow", dependencies=[Depends(current_user)])
+def smart_wallet_shadow(db: Session = Depends(get_db)):
+    """Resultado dos sinais de compra por estado das carteiras no instante do sinal (modo observação)."""
+    return smart_confirm.shadow_report(db)
 
 
 @router.get("/system/phone", response_model=PhoneOut, dependencies=[Depends(current_user)])

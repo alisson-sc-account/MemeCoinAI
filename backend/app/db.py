@@ -64,6 +64,13 @@ def make_engine(url: str) -> Engine:
             cur.execute("PRAGMA mmap_size=268435456")
             cur.close()
 
+        @event.listens_for(engine, "handle_error")
+        def _count_locks(ctx):
+            msg = str(ctx.original_exception).lower()
+            if "locked" in msg or "busy" in msg:
+                from app import metrics
+                metrics.incr("db.locked")
+
     return engine
 
 

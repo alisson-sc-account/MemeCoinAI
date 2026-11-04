@@ -15,6 +15,7 @@ import math
 import time
 from datetime import datetime, timedelta
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -47,7 +48,10 @@ def request_watch(db: Session, token_id: int, now: datetime | None = None) -> No
         w.last_requested_at = now
     else:
         return
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:  # duas abas/processos registraram a mesma moeda ao mesmo tempo: já está vigiada
+        db.rollback()
 
 
 def watched_tokens(db: Session, now: datetime | None = None) -> list[Token]:

@@ -37,3 +37,25 @@ export type FavoritePage = Schemas['FavoritePage']
 export type FavoriteReport = Schemas['FavoriteReport']
 export type AccuracyItem = Schemas['AccuracyItem']
 export type ExitPlan = Schemas['ExitPlanOut']
+
+export type PhonePriority = 'min' | 'low' | 'default' | 'high' | 'urgent'
+export type PhoneSeverity = 'info' | 'low' | 'medium' | 'high' | 'critical'
+export type PhoneKind = 'burst' | 'buy_strong' | 'buy' | 'sell' | 'risk'
+export interface PhoneRule { enabled: boolean; priority: PhonePriority; tags: string; title: string; min_severity: PhoneSeverity }
+export interface PhonePrefs {
+  enabled: boolean
+  server: string
+  topic: string
+  rules: Record<PhoneKind, PhoneRule>
+  body: string
+  min_opportunity_score: number
+  max_risk_score: number
+  min_liquidity_usd: number
+  token_cooldown_minutes: number
+  max_per_hour: number
+  daily_cap: number
+  quiet: { enabled: boolean; start: string; end: string; allow_urgent: boolean }
+  muted: string[]
+  favorites_only: boolean
+  favorites_bypass_filters: boolean
+}

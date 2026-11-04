@@ -48,4 +48,14 @@ def list_predictions(
 def metrics(db: Session = Depends(get_db), target: str | None = None):
     if target and target not in TARGETS:
         raise api_error(422, "invalid_target", f"target deve ser um de {sorted(TARGETS)}")
-    return compute_metrics(db, target)
+    import time
+
+    hit = _metrics_cache.get(target)
+    if hit and time.monotonic() - hit[0] < 120:  # cálculo pesado (~3,5 s) e o número muda devagar
+        return hit[1]
+    out = compute_metrics(db, target)
+    _metrics_cache[target] = (time.monotonic(), out)
+    return out
+
+
+_metrics_cache: dict = {}

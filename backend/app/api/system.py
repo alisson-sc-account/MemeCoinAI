@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from app import __version__, agents, board, metrics, notify
+from app import __version__, agents, board, metrics, notify, notify_prefs
 from app.engine import smart_confirm
 from app.api.deps import current_user
 from app.api.views import build_list_items, token_link, token_ref
@@ -87,6 +87,34 @@ def system_phone():
     """Link do canal de avisos no celular."""
     on = get_settings().ntfy_enabled
     return PhoneOut(enabled=on, url=notify.phone_url() if on else None)
+
+
+@router.get("/system/phone/prefs", response_model=notify_prefs.NotifyPrefs, dependencies=[Depends(current_user)])
+def phone_prefs():
+    """Preferências do aviso no celular (tipos, prioridade, texto, filtros, silêncio, limites)."""
+    return notify_prefs.load()
+
+
+@router.put("/system/phone/prefs", response_model=notify_prefs.NotifyPrefs, dependencies=[Depends(current_user)])
+def save_phone_prefs(body: notify_prefs.NotifyPrefs):
+    """Salva e vale na próxima volta do aviso (~3 s), sem reiniciar."""
+    return notify_prefs.save(body)
+
+
+@router.delete("/system/phone/prefs", response_model=notify_prefs.NotifyPrefs, dependencies=[Depends(current_user)])
+def reset_phone_prefs():
+    """Volta tudo ao padrão."""
+    return notify_prefs.save(notify_prefs.NotifyPrefs())
+
+
+@router.post("/system/phone/test", dependencies=[Depends(current_user)])
+def phone_test(kind: str = "buy_strong"):
+    """Manda um aviso de exemplo agora, com o visual do tipo escolhido."""
+    if kind not in notify_prefs.KINDS:
+        raise HTTPException(422, "tipo desconhecido")
+    if not get_settings().ntfy_enabled:
+        raise HTTPException(409, "Aviso no celular desligado no backend/.env (NTFY_ENABLED).")
+    return {"sent": notify.send_test(kind), "url": notify.phone_url()}
 
 
 @router.get("/system/registry", response_model=list[SourceRegistryOut], dependencies=[Depends(current_user)])

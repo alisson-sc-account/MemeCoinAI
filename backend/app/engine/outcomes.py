@@ -66,6 +66,7 @@ def label_due(db: Session, now: datetime | None = None, limit: int = 2000) -> in
         if r.finished_at
     ]
     labeled = 0
+    pending: list[AnalysisOutcome] = []
     for name, secs in HORIZONS.items():
         h = timedelta(seconds=secs)
         done = select(AnalysisOutcome.analysis_id).where(AnalysisOutcome.horizon_seconds == secs)
@@ -106,11 +107,13 @@ def label_due(db: Session, now: datetime | None = None, limit: int = 2000) -> in
                 out.status = "ok"
                 out.max_return, out.min_return, out.end_return = max(rets), min(rets), rets[-1]
                 out.observations = len(prices)
-            db.add(out)
+            pending.append(out)
             labeled += 1
-            if labeled % 200 == 0:
-                db.commit()  # transações curtas: não segura a trava do SQLite por muito tempo
-    db.commit()
+    # Lê tudo antes e grava depois, em lotes: gravar no meio das leituras segurava a trava do SQLite por
+    # minutos (job evaluate de até 131 s) e os outros agentes davam "database is locked".
+    for i in range(0, len(pending), 200):
+        db.add_all(pending[i:i + 200])
+        db.commit()
     _cache.clear()
     return labeled
 
@@ -151,8 +154,8 @@ def _samples(db: Session, secs: int, as_of: datetime) -> list[tuple[float, float
     ).all()
     data = [tuple(r) for r in rows]
     # Só o minuto atual interessa: sem isto, cada minuto deixava uma cópia dos rótulos na memória.
-    for old in [k for k in _cache if (k[1] if k[0] == "estimate" else k[-1]) != key[-1]]:
-        del _cache[old]
+    for old in [k for k in list(_cache) if (k[1] if k[0] == "estimate" else k[-1]) != key[-1]]:
+        _cache.pop(old, None)  # a API roda em várias threads: outra pode ter apagado antes
     _cache[key] = (time.monotonic(), data)
     return data
 

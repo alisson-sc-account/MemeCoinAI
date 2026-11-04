@@ -2,3 +2,8 @@
 
 .chart-container{width:100%;min-width:0;height:280px}
 
+
+/* ----- Tema MemeCoinAI ----- */
+[data-theme="memecoinai"] body{background:var(--bg)}
+[data-theme="memecoinai"] h1,[data-theme="memecoinai"] h2{letter-spacing:.01em}
+[data-theme="memecoinai"] a:focus-visible,[data-theme="memecoinai"] button:focus-visible,[data-theme="memecoinai"] input:focus-visible,[data-theme="memecoinai"] select:focus-visible{outline:2px solid var(--brand-green);outline-offset:2px}

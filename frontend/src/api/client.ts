@@ -1,4 +1,4 @@
-import type { ApiErrorBody, User, Token, TokenDetail, Alert, Prediction, Meta, Dashboard, Page, History, ExitEstimate, SystemSources, Health, PredictionMetrics, Signal, SignalPerformance, Position, AccountSettings, OpportunityPage, SourceRegistryEntry, AccuracyPage, ExitPlan, Favorite, FavoritePage, FavoriteReport, Security, AgentStatus, Phone } from './types'
+import type { ApiErrorBody, User, Token, TokenDetail, Alert, Prediction, Meta, Dashboard, Page, History, ExitEstimate, SystemSources, Health, PredictionMetrics, Signal, SignalPerformance, Position, AccountSettings, OpportunityPage, SourceRegistryEntry, AccuracyPage, ExitPlan, Favorite, FavoritePage, FavoriteReport, Security, AgentStatus, Phone, PhonePrefs } from './types'
 
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string, public details: unknown = null) { super(message); this.name = 'ApiError' }
@@ -45,6 +45,10 @@ export const apiClient = {
   security: (chain: string, address: string) => api<Security>(`/tokens/${encodeURIComponent(chain)}/${encodeURIComponent(address)}/security`),
   agents: () => api<AgentStatus[]>('/system/agents'),
   phone: () => api<Phone>('/system/phone'),
+  phonePrefs: () => api<PhonePrefs>('/system/phone/prefs'),
+  savePhonePrefs: (body: PhonePrefs) => api<PhonePrefs>('/system/phone/prefs', { method: 'PUT', body: JSON.stringify(body) }),
+  resetPhonePrefs: () => api<PhonePrefs>('/system/phone/prefs', { method: 'DELETE' }),
+  phoneTest: (kind: string) => api<{ sent: boolean; url: string }>(`/system/phone/test?kind=${encodeURIComponent(kind)}`, { method: 'POST' }),
   favorites: () => api<FavoritePage>('/favorites'),
   favoritesReport: () => api<FavoriteReport>('/favorites/report'),
   addFavorite: (chain_id: string, address: string, signal_id: number | null) => api<Favorite>('/favorites', { method: 'POST', body: JSON.stringify({ chain_id, address, signal_id }) }),

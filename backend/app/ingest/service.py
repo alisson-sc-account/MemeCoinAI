@@ -178,9 +178,11 @@ def split_hot_cold(db: Session, boosted: set[int] | None = None) -> tuple[list[T
     """Quentes: posições, sinais de compra/venda, radar, novatos e mais volume. Frios: o resto, do mais antigo."""
     s = get_settings()
     tokens = db.scalars(select(Token).where(Token.is_tracked.is_(True))).all()
-    urgent = set(db.scalars(select(Position.token_id)).all()) | (boosted or set())
-    urgent |= set(db.scalars(select(Signal.token_id).where(Signal.status == "active", Signal.action.in_(("buy", "sell")))).all())
-    first = [t for t in tokens if t.id in urgent]
+    held = set(db.scalars(select(Position.token_id)).all())
+    urgent = held | (boosted or set())
+    # Venda só é urgente se você tem a moeda: milhares de sinais de venda de moedas mortas enchiam o grupo quente.
+    urgent |= set(db.scalars(select(Signal.token_id).where(Signal.status == "active", Signal.action == "buy")).all())
+    first = sorted((t for t in tokens if t.id in urgent), key=lambda t: (t.id in held, t.heat or 0.0), reverse=True)[: s.refresh_hot_tokens]
     chosen = {t.id for t in first}
     new = [t for t in tokens if t.id not in chosen and t.last_refreshed_at is None][:NEW_TOKENS_PER_CYCLE]
     first += new

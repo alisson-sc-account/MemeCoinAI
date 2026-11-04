@@ -45,7 +45,8 @@ class Settings(BaseSettings):
     # 30 s: a fonte usa cache de ~60 s, então metade das coletas pode repetir dados
     # (deduplicadas); em troca, a mudança aparece até 30 s mais cedo.
     refresh_interval_seconds: int = 30
-    refresh_hot_tokens: int = 1500  # 50 req a cada 30 s
+    refresh_hot_tokens: int = 450  # 15 req a cada ~8 s: moeda subindo tem preço novo em segundos, não em ~45 s
+    refresh_hot_interval_seconds: int = 8
     refresh_requests_per_cycle: int = 75
     refresh_cold_requests_per_cycle: int = 70  # 140 req/min: 4200 moedas/min em rodízio
     discovery_interval_seconds: int = 60
@@ -88,9 +89,11 @@ class Settings(BaseSettings):
     ntfy_enabled: bool = True  # aviso no celular, grátis e sem conta (app/notify.py)
     tape_alerts_enabled: bool = False  # em observação: na prova ficou bem abaixo do disparo pela coleta
     security_gate: bool = True  # compra forte exige verificação de segurança limpa
+    security_strict: bool = True  # liquidez solta, insiders ou concentração bloqueiam a compra; moeda nova espera a verificação
     # Carteiras que costumam acertar: só observação (mostra e registra no instante do sinal; nunca muda o sinal).
     # false desliga tudo. Não existe chave de "peso": influência só depois de provar valor (ver smart_confirm).
     smart_wallet_shadow: bool = True
+    smart_wallet_boost: bool = True  # 2+ carteiras elite + segurança limpa: compra moderada vira forte
     jupiter_price_base_url: str = "https://lite-api.jup.ag"
     solana_rpc_url: str = "https://api.mainnet-beta.solana.com"
     http_timeout_seconds: float = 15.0

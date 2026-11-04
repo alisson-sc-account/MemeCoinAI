@@ -237,3 +237,13 @@ def test_positions_are_per_user(client, fake_dex):
     client.post(f"{API}/auth/logout")
     client.post(f"{API}/auth/login", json={"username": "natan", "password": "test-initial-pw"})
     assert client.get(f"{API}/positions").json() == []
+
+
+def test_early_exit_and_suspicious_chart():
+    from app.engine.signals import early_exit, suspicious_chart
+    assert early_exit({"price_change_h1": 60, "price_change_m5": -12, "buys_m5": 10, "sells_m5": 30})
+    assert early_exit({"liquidity_change_vs_max_1h": -0.25, "buys_m5": 5, "sells_m5": 9})
+    assert not early_exit({"price_change_h1": 60, "price_change_m5": 5, "buys_m5": 30, "sells_m5": 10})
+    assert suspicious_chart({"price_change_m5": 80, "buys_m5": 40, "sells_m5": 0})
+    assert suspicious_chart({"liquidity_to_mcap": 0.01, "price_change_h1": 120})
+    assert not suspicious_chart({"price_change_m5": 20, "buys_m5": 40, "sells_m5": 12, "liquidity_to_mcap": 0.2})

@@ -11,7 +11,7 @@ from pathlib import Path
 from app.config import BACKEND_DIR, get_settings
 
 log = logging.getLogger("backup")
-KEEP = 5
+KEEP = 3  # cada cópia tem ~2,5 GB
 PREFIX = "memecoinai-"
 
 
@@ -54,5 +54,8 @@ def make_backup() -> Path | None:
     temp.replace(target)
     for old in sorted(folder.glob(f"{PREFIX}*.db"))[:-KEEP]:
         old.unlink()
+    for stuck in folder.glob(f"{PREFIX}*.tmp"):  # cópia interrompida (desligou no meio): nunca seria usada
+        if stuck != temp:
+            stuck.unlink(missing_ok=True)
     log.info("cópia do banco salva em %s", target.name)
     return target

@@ -1,8 +1,8 @@
 /** Quais alertas abrem no meio da tela. Preferência deste navegador; venda fica dentro da moeda por padrão. */
-export type CenterAlerts = { buy_strong: boolean; buy: boolean; sell: boolean; burst: boolean }
+export type CenterAlerts = { buy_strong: boolean; buy: boolean; sell: boolean; burst: boolean; min_score: number }
 
 const KEY = 'mcai-center-alerts'
-export const DEFAULT_CENTER_ALERTS: CenterAlerts = { buy_strong: true, buy: false, sell: false, burst: true }
+export const DEFAULT_CENTER_ALERTS: CenterAlerts = { buy_strong: true, buy: false, sell: false, burst: true, min_score: 0 }
 
 export function readCenterAlerts(): CenterAlerts {
   try {

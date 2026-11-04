@@ -314,3 +314,15 @@ def test_young_hot_coin_is_checked_first(db, fake_dex):
     token, _ = track_token(db, "solana", SOL_MINT)
     target = sec.next_target(db)
     assert target[0].id == token.id
+
+
+def test_strict_gate_blocks_rugpull_patterns():
+    """Caso real (BUDDY, 04/11): liquidez 0% travada, sinal de compra, liquidez retirada 3 min depois."""
+    buy = {"action": "buy", "strength": "moderate", "headline": "h", "reasons": []}
+    lp_loose = [{"key": "lp", "status": "warn"}, {"key": "top1", "status": "ok"}]
+    assert sec.apply_to_decision(buy, "caution", lp_loose)["action"] == "avoid"
+    assert sec.apply_to_decision(buy, "caution", [{"key": "insiders", "status": "warn"}])["action"] == "avoid"
+    assert sec.apply_to_decision(buy, "caution", [{"key": "top10", "status": "danger"}])["action"] == "avoid"
+    assert sec.apply_to_decision(buy, None, None, young=True)["action"] == "avoid"  # nova e sem verificação: espera
+    assert sec.apply_to_decision(buy, "clear", [{"key": "lp", "status": "ok"}])["action"] == "buy"
+    assert sec.apply_to_decision(buy, None, None, young=False)["action"] == "buy"

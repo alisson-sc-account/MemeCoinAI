@@ -6,6 +6,8 @@ import type { Advice, Alert, HorizonEstimate, Position, Signal } from '../api/ty
 import { price, relativeTime, shortAddress, usd } from '../lib/format'
 import { ageText } from '../lib/format'
 import { readCenterAlerts, wantsSignal, writeCenterAlerts, type CenterAlerts } from './alertPrefs'
+import { PhonePrefsEditor } from './phone'
+import { openAxiom } from '../lib/axiom'
 import styles from './signals.module.css'
 import { playAlertSound, setSoundEnabled, soundEnabled } from './sound'
 
@@ -144,8 +146,9 @@ function useBurstWatch(username: string, navigate: (to: string) => void, enabled
   if (!top) return null
   const dismiss = () => { setLastSeen(maxId); write(maxId) }
   const stats = patternStats(top)
+  const buy = top.token ? () => { dismiss(); openAxiom(top.token!.address) } : undefined
   return <div className={styles.shade} role="presentation" onClick={dismiss}>
-    <CloseOnEscape onClose={dismiss} />
+    <CloseOnEscape onClose={dismiss} onEnter={buy} />
     <div className={`${styles.modal} ${styles.burst}`} role="alertdialog" aria-modal="true" aria-labelledby="burst-title" onClick={e => e.stopPropagation()}>
       <ActionBadge action="burst" />
       <p id="burst-title" className={styles.big}>{top.title}</p>
@@ -155,7 +158,8 @@ function useBurstWatch(username: string, navigate: (to: string) => void, enabled
       <div className={styles.stats}><small>Histórico deste padrão</small><span>{statsLine(stats)}</span></div>
       <p className={styles.meta}>Detecção de movimento em andamento, não previsão: muitos disparos se desfazem em minutos.</p>
       <div className={styles.row}>
-        <button className={styles.btnPrimary} autoFocus onClick={() => { dismiss(); navigate(top.link ?? '/alerts') }}>Ver token</button>
+        {buy && <button className={styles.btnPrimary} onClick={buy}>Abrir na Axiom (Enter)</button>}
+        <button className={styles.btn} onClick={() => { dismiss(); navigate(top.link ?? '/alerts') }}>Ver token</button>
         <button className={styles.btn} onClick={dismiss}>Fechar</button>
       </div>
     </div>
@@ -217,16 +221,19 @@ export function SoundSettings() {
 }
 
 /** ESC fecha o alerta que está no meio da tela. */
-function CloseOnEscape({ onClose }: { onClose: () => void }) {
+function CloseOnEscape({ onClose, onEnter }: { onClose: () => void; onEnter?: () => void }) {
   useEffect(() => {
-    const handle = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const handle = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+      else if (e.key === 'Enter' && onEnter) { e.preventDefault(); onEnter() }
+    }
     window.addEventListener('keydown', handle)
     return () => window.removeEventListener('keydown', handle)
-  }, [onClose])
+  }, [onClose, onEnter])
   return null
 }
 
-const CENTER_OPTIONS: { key: keyof CenterAlerts; label: string; hint: string }[] = [
+const CENTER_OPTIONS: { key: Exclude<keyof CenterAlerts, 'min_score'>; label: string; hint: string }[] = [
   { key: 'buy_strong', label: 'Compra forte', hint: 'Compra prioritária' },
   { key: 'buy', label: 'Compra possível', hint: 'Sinal moderado: aparece mais vezes' },
   { key: 'burst', label: 'Disparo', hint: 'Moeda subindo de repente, em minutos' },
@@ -238,9 +245,11 @@ export function PhoneSettings() {
   if (q.isPending) return <p className={styles.meta}>Carregando…</p>
   if (q.isError || !q.data.url) return <p className={styles.meta}>Aviso no celular desligado.</p>
   return <div className={styles.list}>
-    <p>Abra este link no celular uma vez e toque em "Subscribe". Vão disparo extremo e compra forte, de graça e sem conta.</p>
-    <a href={q.data.url} target="_blank" rel="noopener noreferrer" className={styles.phoneLink}>{q.data.url}</a>
-    <p className={styles.meta}>Quem tiver este link vê os avisos. Não vai saldo nem posição. Limite de 200 avisos por dia.</p>
+    <p><b>Para apitar sozinho, use o app (não o site):</b> instale o "ntfy" (Play Store/App Store), toque em "+", cole o canal abaixo e ligue <b>"Entrega instantânea"</b>. No Android, libere o ntfy na economia de bateria.</p>
+    <p>Canal: <code className={styles.phoneLink}>{q.data.url.split('/').pop()}</code></p>
+    <p><a href={q.data.url.replace(/^https?:\/\//, 'ntfy://')} className={styles.phoneLink}>Abrir no app ntfy (no celular)</a> · <a href={q.data.url} target="_blank" rel="noopener noreferrer" className={styles.phoneLink}>versão web</a></p>
+    <p className={styles.meta}>Quem tiver este link vê os avisos. Não vai saldo nem posição.</p>
+    <PhonePrefsEditor/>
   </div>
 }
 
@@ -257,11 +266,15 @@ function recentlyAlerted(address: string, id: number): boolean {
 
 export function CenterAlertSettings() {
   const [prefs, setPrefs] = useState(readCenterAlerts)
-  const change = (key: keyof CenterAlerts, on: boolean) => { const next = { ...prefs, [key]: on }; setPrefs(next); writeCenterAlerts(next) }
+  const change = (key: keyof CenterAlerts, on: boolean | number) => { const next = { ...prefs, [key]: on }; setPrefs(next); writeCenterAlerts(next) }
   return <div className={styles.list}>
     {CENTER_OPTIONS.map(o => <label key={o.key} className={styles.row}>
       <input type="checkbox" checked={prefs[o.key]} onChange={e => change(o.key, e.target.checked)} /> <b>{o.label}</b> <span className={styles.meta}>{o.hint}</span>
     </label>)}
+    <label className={styles.row}><b>Só apitar compra com score acima de</b>
+      <input type="number" min={0} max={100} style={{ width: 80 }} value={prefs.min_score} onChange={e => change('min_score', Math.max(0, Math.min(100, Number(e.target.value) || 0)))} />
+      <span className={styles.meta}>0 = qualquer score. Enter no alerta abre a moeda na Axiom.</span>
+    </label>
   </div>
 }
 
@@ -273,7 +286,7 @@ export function SignalWatcher({ username }: { username: string }) {
   const [lastSeen, setLastSeen] = useState<number | null>(() => readLastSeen(username))
   const q = useQuery({ queryKey: ['signals', 'watch'], queryFn: () => apiClient.signals('action=buy&action=sell&page_size=20'), refetchInterval: ALERT_POLL_MS, refetchIntervalInBackground: true })
   // A mesma moeda só abre alerta de novo depois de 1 h: o sinal oscila e repetia o aviso.
-  const relevant = (q.data?.items ?? []).filter(s => wantsSignal(prefs, s.action, s.strength) && !recentlyAlerted(s.token.address, s.id))
+  const relevant = (q.data?.items ?? []).filter(s => wantsSignal(prefs, s.action, s.strength) && (s.action !== 'buy' || s.opportunity_score >= prefs.min_score) && !recentlyAlerted(s.token.address, s.id))
   const maxId = relevant.reduce((m, s) => Math.max(m, s.id), 0)
   useEffect(() => {
     // Primeira visita: não abre alerta de sinais antigos, só passa a vigiar os novos.
@@ -296,8 +309,9 @@ export function SignalWatcher({ username }: { username: string }) {
   const dismiss = () => { setLastSeen(maxId); writeLastSeen(username, maxId) }
   const e1 = top.estimates.find(e => e.horizon === '1h')
   const canAsk = typeof Notification !== 'undefined' && Notification.permission === 'default'
+  const buy = () => { dismiss(); openAxiom(top.token.address) }
   return <div className={styles.shade} role="presentation" onClick={dismiss}>
-    <CloseOnEscape onClose={dismiss} />
+    <CloseOnEscape onClose={dismiss} onEnter={buy} />
     <div className={`${styles.modal} ${styles[top.action] ?? ''}`} role="alertdialog" aria-modal="true" aria-labelledby="signal-title" onClick={e => e.stopPropagation()}>
       <ActionBadge action={top.action} strength={top.strength} />
       <p id="signal-title" className={styles.big}>{buyLine(top) ?? top.headline}</p>
@@ -308,7 +322,8 @@ export function SignalWatcher({ username }: { username: string }) {
       {top.reasons.length > 0 && <ul className={styles.reasons}>{top.reasons.slice(0, 4).map(r => <li key={r}>{r}</li>)}</ul>}
       <p className={styles.meta}>Risco {top.risk_score.toFixed(0)}/100. Estimativa automática, não é garantia. {fresh.length > 1 ? `+${fresh.length - 1} outro(s) sinal(is) novo(s).` : ''}</p>
       <div className={styles.row}>
-        <button className={styles.btnPrimary} autoFocus onClick={() => { dismiss(); navigate(top.link) }}>Ver token</button>
+        <button className={styles.btnPrimary} onClick={buy}>Abrir na Axiom (Enter)</button>
+        <button className={styles.btn} onClick={() => { dismiss(); navigate(top.link) }}>Ver token</button>
         <button className={styles.btn} onClick={dismiss}>Fechar</button>
         {canAsk && <button className={styles.btn} onClick={() => { void Notification.requestPermission() }}>Avisar também em outras abas</button>}
       </div>

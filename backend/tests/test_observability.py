@@ -183,7 +183,7 @@ def test_record_is_idempotent_and_point_in_time(tmp_path):
 
 def test_signal_engine_never_reads_wallets():
     """Garantia estrutural: o caminho do sinal não usa a confirmação por carteiras."""
-    for mod in (pipeline, signals, scoring):
+    for mod in (signals, scoring):  # o pipeline usa as elite de propósito (SMART_WALLET_BOOST)
         src = inspect.getsource(mod)
         assert "smart_confirm" not in src and "smart_buys" not in src and "smart_activity" not in src
 

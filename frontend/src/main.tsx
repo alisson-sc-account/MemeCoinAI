@@ -9,7 +9,9 @@ import '@fontsource/jetbrains-mono/400.css'
 import './styles/tokens.css'
 import './styles/global.css'
 import { App } from './App'
+import { applyTheme } from './features/theme'
 import { unlockAudioOnFirstInteraction } from './features/sound'
+applyTheme()
 
 unlockAudioOnFirstInteraction()
 

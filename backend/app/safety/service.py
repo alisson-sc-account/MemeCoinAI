@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.db import utcnow
 from app.live import service as live
 from app.models import Analysis, Pair, PairSnapshot, Position, SecurityReport, ServiceHeartbeat, Signal, Token, WalletProfile
@@ -220,18 +221,18 @@ def next_target(db: Session, now: datetime | None = None) -> tuple[Token, bool] 
     for t in live.focused_tokens(db, now):
         if due(t, RECHECK_OPEN):
             return t, True
-    # Moeda nova e quente sem verificação vem logo depois da aberta: o disparo dela espera esta verificação.
+    urgent = db.scalars(select(Token).join(Signal, Signal.token_id == Token.id)
+                        .where(Signal.status == "active", Signal.action == "buy", Token.chain_id == "solana")).all()
+    urgent = [*urgent, *db.scalars(select(Token).join(Position, Position.token_id == Token.id).where(Token.chain_id == "solana"))]
+    # Com sinal de compra e nunca verificada vem primeiro: é a que você pode comprar agora (veredito rápido, segundos).
+    never = [t for t in urgent if t.id not in done]
+    if never:
+        return never[0], False
+    # Depois a moeda nova e quente sem verificação: o disparo e a compra dela esperam esta verificação.
     young = db.scalars(select(Token).where(Token.is_tracked.is_(True), Token.chain_id == "solana", Token.first_seen_at >= now - timedelta(hours=1),
                                            Token.id.not_in(select(SecurityReport.token_id))).order_by(Token.heat.desc()).limit(1)).first()
     if young is not None:
         return young, False
-    urgent = db.scalars(select(Token).join(Signal, Signal.token_id == Token.id)
-                        .where(Signal.status == "active", Signal.action == "buy", Token.chain_id == "solana")).all()
-    urgent = [*urgent, *db.scalars(select(Token).join(Position, Position.token_id == Token.id).where(Token.chain_id == "solana"))]
-    # Primeiro o veredito rápido de todas (segundos); as carteiras, mais demoradas, vêm depois.
-    never = [t for t in urgent if t.id not in done]
-    if never:
-        return never[0], False
     no_wallets = [t for t in urgent if not (db.get(SecurityReport, t.id).facts or {}).get("wallets")]
     if no_wallets:
         return no_wallets[0], True
@@ -261,12 +262,38 @@ def running(db: Session, now: datetime | None = None) -> bool:
 
 
 # ---------------- O que o resto do sistema usa ----------------
-def apply_to_decision(decision: dict, verdict: str | None) -> dict:
-    """Trava da compra: sem verificação ou com atenção, no máximo moderada; com perigo, não compra."""
+# Itens da verificação que sozinhos já bloqueiam a compra: é como a maioria dos golpes rápidos acontece
+# (ex.: liquidez 0% travada retirada 3 min depois do sinal).
+BLOCKING = {"lp": "liquidez não travada (pode ser retirada)", "insiders": "rede de carteiras ligadas",
+            "top1": "uma carteira concentra muitas moedas", "top10": "10 carteiras concentram muitas moedas"}
+
+
+def blocking_reasons(checks: list | None) -> list[str]:
+    out = []
+    for c in checks or []:
+        key, status = c.get("key"), c.get("status")
+        if key in BLOCKING and (status == "danger" or (key in ("lp", "insiders") and status == "warn")):
+            out.append(BLOCKING[key])
+    return out
+
+
+def apply_to_decision(decision: dict, verdict: str | None, checks: list | None = None, young: bool = False) -> dict:
+    """Trava da compra.
+
+    Perigo, liquidez solta, insiders ou concentração: não compra. Moeda nova (< 1 h) sem verificação: espera.
+    Atenção por outro motivo ou sem verificação: no máximo moderada.
+    """
     if decision.get("action") != "buy":
         return decision
+    avoid = {**decision, "action": "avoid", "strength": "moderate"}
     if verdict == "danger":
-        return {**decision, "action": "avoid", "strength": "moderate", "headline": "Evitar: sinais de golpe", "reasons": ["Verificação de segurança encontrou perigo"]}
+        return {**avoid, "headline": "Evitar: sinais de golpe", "reasons": ["Verificação de segurança encontrou perigo"]}
+    if get_settings().security_strict:
+        if blocked := blocking_reasons(checks):
+            return {**avoid, "headline": "Evitar: risco de rugpull", "reasons": [f"Segurança: {r}" for r in blocked]}
+        if verdict in (None, "unknown") and young:
+            return {**avoid, "headline": "Aguardar: segurança ainda não verificada",
+                    "reasons": ["Moeda nova: compra só depois da verificação de segurança"]}
     if decision.get("strength") == "strong" and verdict != "clear":
         why = "Verificação de segurança encontrou pontos de atenção" if verdict == "caution" else "Segurança ainda não verificada"
         return {**decision, "strength": "moderate", "reasons": [*decision.get("reasons", []), why]}

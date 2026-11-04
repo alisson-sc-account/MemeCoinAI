@@ -4,3 +4,6 @@
 @import '@fontsource/inter/700.css';
 @import '@fontsource/jetbrains-mono/400.css';
 :root { color-scheme: dark; font-family: Inter,system-ui,-apple-system,'Segoe UI',sans-serif; --bg:#0b0b0c;--surface-1:#121213;--surface-2:#19191b;--surface-3:#232325;--border:#29292c;--border-strong:#3e3e42;--text:#f2f2f2;--text-muted:#a9a9ad;--text-subtle:#8c8c91;--accent:#f2f2f2;--accent-soft:#232325;--focus:#f2f2f2;--risk-critical:#f04438;--risk-high:#f97316;--risk-moderate:#eab308;--risk-low:#22c55e;--opportunity:#38bdf8;--info:#93a4c3;--stale:#b4a7d6;--positive:#22c55e;--negative:#f04438;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-6:24px;--space-8:32px;--radius-sm:3px;--radius-md:4px;--shadow-card:none; }
+
+/* Tema MemeCoinAI (padrão): preto profundo, verde da alta, vermelho da queda, texto prata. O "Clássico" é o :root acima. */
+:root[data-theme="memecoinai"]{--bg:#08090a;--surface-1:#0f1112;--surface-2:#161a1b;--surface-3:#1e2324;--border:#222827;--border-strong:#34403b;--text:#eef1ef;--text-muted:#a3aca7;--text-subtle:#7f8a85;--accent:#16c75f;--accent-soft:rgba(22,199,95,.12);--focus:#16c75f;--brand-green:#16c75f;--brand-green-2:#4be38a;--brand-red:#e3262b;--risk-critical:#e3262b;--risk-low:#16c75f;--positive:#16c75f;--negative:#e3262b;--opportunity:#16c75f;--radius-sm:6px;--radius-md:10px;--shadow-card:none}

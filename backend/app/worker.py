@@ -155,13 +155,13 @@ _hot_idle.set()
 def _yield_to_hot() -> None:
     """Todos dividem o limite do DEX Screener: a fria espera enquanto a quente busca, para o disparo não atrasar.
 
-    Espera o aviso de "quente terminou" em vez de conferir a cada 0,2 s; o teto de 60 s garante que a fria
-    nunca fica parada para sempre (sem fome).
+    Espera o aviso de "quente terminou" em vez de conferir a cada 0,2 s. Teto de 5 s por lote: com 60 s o
+    rodízio frio levava 11 min por volta e parecia parado.
     """
     if not _hot_busy.is_set():
         return
     t0 = time.monotonic()
-    _hot_idle.wait(timeout=60)
+    _hot_idle.wait(timeout=5)
     metrics.observe("cold.yield_wait", (time.monotonic() - t0) * 1000)
 
 
@@ -217,8 +217,33 @@ def job_notify(db):
     return {"sent": notify.run_once(db)}
 
 
+STALE_ALERT = 6 * 3600  # alerta aberto que não se repete há 6 h já não descreve o agora
+
+
+def close_stale_alerts(db) -> int:
+    """Fecha alertas de moedas que saíram do acompanhamento e alertas parados (eram 20 mil abertos)."""
+    from datetime import timedelta
+
+    from sqlalchemy import or_, update
+
+    from app.db import utcnow
+    from app.models import Alert
+
+    now = utcnow()
+    untracked = select(Token.id).where(Token.is_tracked.is_(False))
+    total = 0
+    while True:  # em lotes curtos para não segurar a trava do banco
+        ids = db.scalars(select(Alert.id).where(Alert.status == "open", or_(
+            Alert.token_id.in_(untracked), Alert.last_occurrence_at < now - timedelta(seconds=STALE_ALERT))).limit(500)).all()
+        if not ids:
+            return total
+        db.execute(update(Alert).where(Alert.id.in_(ids)).values(status="resolved", status_changed_at=now))
+        db.commit()
+        total += len(ids)
+
+
 def job_prune(db):
-    return {"pruned": prune_inactive(db)}
+    return {"pruned": prune_inactive(db), "alerts_closed": close_stale_alerts(db)}
 
 
 def _discover_part(part):
@@ -265,7 +290,7 @@ def _run(s) -> None:
     signal.signal(signal.SIGINT, _stop)
     signal.signal(signal.SIGTERM, _stop)
     schedule = [
-        ("market_hot", job_market_hot, s.refresh_interval_seconds),
+        ("market_hot", job_market_hot, s.refresh_hot_interval_seconds),
         ("market_cold", job_market_cold, s.refresh_interval_seconds),
         ("analysis", job_analysis, ANALYSIS_PAUSE),
         ("scout", job_scout, 20),

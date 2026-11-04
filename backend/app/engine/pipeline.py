@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app import metrics
 from app.models import SecurityReport
-from app.safety.service import apply_to_decision, detect_rug
+from app.safety.service import apply_to_decision, blocking_reasons, detect_rug
 from app.engine.scoring import Factor, risk_level
 from app.config import get_settings
 from app.db import utcnow
@@ -118,8 +118,22 @@ def burst_allowed(db: Session, token: Token, as_of: datetime) -> bool:
         return True
     report = db.get(SecurityReport, token.id)
     if report is not None:
-        return report.verdict != "danger"
+        return report.verdict != "danger" and not (get_settings().security_strict and blocking_reasons(report.checks))
     return as_of - token.first_seen_at >= BURST_UNVERIFIED_MAX_AGE
+
+
+def _elite_boost(db: Session, token: Token, pair, decision: dict, as_of: datetime) -> dict:
+    """2+ carteiras elite compraram nos últimos 15 min e a segurança está limpa: compra moderada vira forte."""
+    from app.engine import smart_confirm as wallets
+
+    c = wallets.evaluate(token.id, pair.dex_id if pair else None, at=as_of.timestamp())
+    if c.get("elite_wallets", 0) < 2:
+        return decision
+    report = db.get(SecurityReport, token.id)
+    why = f"{c['elite_wallets']} carteiras elite (75%+ de acerto) compraram nos últimos {c['window_minutes']} min"
+    if decision.get("strength") == "moderate" and report is not None and report.verdict == "clear":
+        return {**decision, "strength": "strong", "headline": signals.HEADLINES[("buy", "strong")], "reasons": [why, *decision.get("reasons", [])]}
+    return {**decision, "reasons": [*decision.get("reasons", []), why]}
 
 
 def analyze_token(db: Session, token: Token, as_of: datetime | None = None, force: bool = False) -> Analysis | None:
@@ -194,7 +208,10 @@ def analyze_token(db: Session, token: Token, as_of: datetime | None = None, forc
                               previous=(prev.action, prev.strength) if prev else None)
     if get_settings().security_gate:
         report = db.get(SecurityReport, token.id)
-        decision = apply_to_decision(decision, report.verdict if report else None)
+        decision = apply_to_decision(decision, report.verdict if report else None, report.checks if report else None,
+                                     young=as_of - token.first_seen_at < BURST_UNVERIFIED_MAX_AGE)
+    if decision.get("action") == "buy" and get_settings().smart_wallet_boost:
+        decision = _elite_boost(db, token, pair, decision, as_of)
     sig, created = signals.upsert_signal(db, token.id, analysis, decision, estimates, features.get("price_usd"))
     decided = utcnow()
     if snap is not None:

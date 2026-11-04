@@ -42,6 +42,41 @@ STRONG_MIN_OPPORTUNITY = 60.0
 HYSTERESIS_POINTS = 5.0
 
 
+def _n(v) -> float:
+    return float(v) if isinstance(v, (int, float)) else 0.0
+
+
+def early_exit(f: dict) -> list[str]:
+    """Venda antes da queda grande: o topo virando, não só depois de despencar."""
+    pc5, pc1 = _n(f.get("price_change_m5")), _n(f.get("price_change_h1"))
+    buys5, sells5 = _n(f.get("buys_m5")), _n(f.get("sells_m5"))
+    liq_chg = f.get("liquidity_change_vs_max_1h")
+    out = []
+    if pc1 >= 30 and pc5 <= -8 and sells5 > buys5 * 1.5:
+        out.append(f"Topo virando: caiu {pc5:.0f}% em 5 min depois de subir {pc1:.0f}% em 1 h, com mais vendas que compras")
+    if isinstance(liq_chg, (int, float)) and -0.6 < liq_chg <= -0.15 and sells5 > buys5:
+        out.append(f"Liquidez começando a sair ({liq_chg * 100:.0f}% do máximo da última hora)")
+    if pc1 >= 100 and buys5 + sells5 >= 20 and sells5 >= buys5 * 2:
+        out.append("Alta esgotando: vendas dobram as compras nos últimos 5 min")
+    return out
+
+
+def suspicious_chart(f: dict) -> list[str]:
+    """Padrões comuns de moeda manipulada (compra por robô, pool rasa, volume falso)."""
+    pc5, pc1 = _n(f.get("price_change_m5")), _n(f.get("price_change_h1"))
+    buys5, sells5 = _n(f.get("buys_m5")), _n(f.get("sells_m5"))
+    out = []
+    if pc5 >= 40 and buys5 >= 15 and sells5 == 0:
+        out.append("Subida vertical sem nenhuma venda: padrão de robô ou venda bloqueada")
+    ltm = f.get("liquidity_to_mcap")
+    if isinstance(ltm, (int, float)) and 0 < ltm < 0.03 and pc1 >= 50:
+        out.append(f"Liquidez muito rasa para o valor de mercado ({ltm * 100:.1f}%): fácil de derrubar")
+    vtl, avg = f.get("volume_h24_to_liquidity"), f.get("avg_trade_usd_h1")
+    if isinstance(vtl, (int, float)) and vtl >= 80 and isinstance(avg, (int, float)) and 0 < avg < 15:
+        out.append("Volume muito alto com negócios minúsculos: possível volume falso")
+    return out
+
+
 def decide(analysis, features: dict, estimates: list[dict], freshness_ok: bool = True,
            previous: tuple[str, str] | None = None) -> dict:
     """`previous` = (ação, força) do sinal ativo anterior, usado só na histerese de compra."""
@@ -69,11 +104,16 @@ def decide(analysis, features: dict, estimates: list[dict], freshness_ok: bool =
     sell_moderate = [i for i in ("L2_liquidity_drop",) if i in ids]
     if "A1_sell_pressure" in ids and pc1 is not None and pc1 <= -10:
         sell_moderate.append("A1_sell_pressure")
+    sell_moderate += early_exit(features)
     if sell_strong or sell_moderate:
         strength = "strong" if sell_strong else "moderate"
         for i in sell_strong + sell_moderate:
             reasons.append(f"Risco observado {observed_risk:.0f}/100" if i == "risk" else labels.get(i, i))
         return {"action": "sell", "strength": strength, "headline": HEADLINES[("sell", strength)], "reasons": reasons}
+
+    # --- EVITAR: gráfico com cara de manipulação -------------------------
+    if sus := suspicious_chart(features):
+        return {"action": "avoid", "strength": "moderate", "headline": "Evitar: gráfico suspeito", "reasons": sus}
 
     # --- EVITAR: risco técnico/estrutural ----------------------------------
     technical = [i for i in ("T1_mint_authority", "T2_freeze_authority", "T3_token2022_extensions") if i in ids]
@@ -147,8 +187,24 @@ def alert_for(sig: Signal) -> AlertCandidate | None:
     return None
 
 
+_perf_cache: dict = {}
+PERF_CACHE_SECONDS = 120  # o histórico inteiro levava ~16 s por pedido e muda devagar
+
+
 def performance(db: Session, since: datetime | None = None) -> list[dict]:
     """Acerto histórico por tipo de sinal e horizonte, usando os rótulos das análises."""
+    import time as _t
+
+    hit_ = _perf_cache.get(since)
+    if hit_ and _t.monotonic() - hit_[0] < PERF_CACHE_SECONDS:
+        return hit_[1]
+    out = _performance(db, since)
+    _perf_cache.clear()
+    _perf_cache[since] = (_t.monotonic(), out)
+    return out
+
+
+def _performance(db: Session, since: datetime | None = None) -> list[dict]:
     q = select(Signal.action, Signal.strength, AnalysisOutcome.horizon_seconds, AnalysisOutcome.end_return,
                AnalysisOutcome.max_return, AnalysisOutcome.min_return).join(
         AnalysisOutcome, AnalysisOutcome.analysis_id == Signal.analysis_id

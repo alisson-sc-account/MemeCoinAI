@@ -25,7 +25,9 @@ SUPPORTED_DEX = {"pumpfun", "pumpswap"}
 WINDOW_MINUTES = 15  # compra mais antiga que isso não confirma mais (expira)
 MIN_KNOWN_SMART = 10  # com menos carteiras boas conhecidas, a amostra é pequena demais para dizer algo
 MIN_WALLETS_CONFIRMED = 2
-MAX_TOP_SHARE = 0.8  # uma carteira com 80%+ do valor é concentração, não confirmação de várias
+MAX_TOP_SHARE = 0.8
+# Elite: as que acertam MUITO. Só elas podem reforçar um sinal de compra (com segurança limpa).
+ELITE_MIN_POSITIONS, ELITE_MIN_WIN_RATE, ELITE_MIN_PROFIT_USD = 8, 0.75, 500.0  # uma carteira com 80%+ do valor é concentração, não confirmação de várias
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS smart_confirmations (
     signal_id INTEGER PRIMARY KEY, token_id INTEGER, signal_ts REAL, recorded_ts REAL, state TEXT,
@@ -53,7 +55,7 @@ def evaluate(token_id: int, dex_id: str | None, at: float | None = None, window_
     at = at or time.time()
     base = {"state": "insufficient_data", "wallets": 0, "usd": 0.0, "known_smart": 0, "top_share": None,
             "last_buy_age_seconds": None, "window_minutes": window_minutes, "rules_version": RULES_VERSION,
-            "influences_signal": False}
+            "influences_signal": False, "elite_wallets": 0}
     if (dex_id or "").lower() not in SUPPORTED_DEX:
         return {**base, "state": "unsupported_source",
                 "explanation": "Só pump.fun e PumpSwap ligam compra à carteira; esta moeda negocia em outra DEX."}
@@ -65,12 +67,16 @@ def evaluate(token_id: int, dex_id: str | None, at: float | None = None, window_
         known = con.execute("SELECT COUNT(*) FROM smart_wallets").fetchone()[0]
         rows = con.execute("SELECT wallet, SUM(usd), MAX(ts) FROM smart_buys WHERE token_id = ? AND ts <= ? AND ts >= ? GROUP BY wallet",
                            (token_id, at, at - 86400)).fetchall()
+        elite = con.execute(
+            "SELECT COUNT(DISTINCT b.wallet) FROM smart_buys b JOIN smart_wallets w ON w.wallet = b.wallet "
+            "WHERE b.token_id = ? AND b.ts <= ? AND b.ts >= ? AND w.positions >= ? AND w.win_rate >= ? AND w.profit_usd >= ?",
+            (token_id, at, at - window_minutes * 60, ELITE_MIN_POSITIONS, ELITE_MIN_WIN_RATE, ELITE_MIN_PROFIT_USD)).fetchone()[0]
     except sqlite3.Error:
         return {**base, "explanation": "Registro de negociações indisponível."}
     finally:
         if own:
             con.close()
-    base["known_smart"] = known
+    base["known_smart"], base["elite_wallets"] = known, elite
     if known < MIN_KNOWN_SMART:
         return {**base, "explanation": f"Só {known} carteira(s) boa(s) conhecida(s): amostra pequena demais."}
     cut = at - window_minutes * 60

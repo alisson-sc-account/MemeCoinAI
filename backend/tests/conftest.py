@@ -110,6 +110,11 @@ def isolated_db(tmp_path, monkeypatch):
     accuracy.clear_cache()
     burst.clear_cache()
     outcomes._cache.clear()
+    from app.api import predictions as _pred
+    from app.engine import signals as _sig
+
+    _sig._perf_cache.clear()
+    _pred._metrics_cache.clear()
     # Rate limiters globais não devem atrasar os testes.
     from app.sources import dexscreener, solana_rpc
 
@@ -121,6 +126,10 @@ def isolated_db(tmp_path, monkeypatch):
     from app.tape import store as tape_store
 
     monkeypatch.setattr(tape_store, "tape_path", lambda: tmp_path / "tape.db")
+    from app import notify_prefs
+
+    monkeypatch.setattr(notify_prefs, "prefs_path", lambda: tmp_path / "notify_prefs.json")  # teste nunca lê as suas preferências
+    notify_prefs._cache.update(key=None, prefs=None)
     from app import metrics
 
     metrics.reset()

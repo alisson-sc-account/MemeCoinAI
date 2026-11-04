@@ -43,3 +43,17 @@ input,select{border-radius:var(--radius-sm)}
 .sourceBanner{padding:9px 28px;background:var(--surface-2);border-bottom:1px solid var(--border);color:var(--stale);font-size:12px}.staleRow{opacity:.7}
 
 .moreDetails{border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-1)}.moreDetails>summary{cursor:pointer;padding:14px 16px;font-weight:600;color:var(--text-muted);list-style-position:inside;min-height:44px}.moreDetails>summary:hover{color:var(--text)}.moreDetails[open]>summary{border-bottom:1px solid var(--border)}.moreDetails[open]{display:flex;flex-direction:column;gap:16px;padding-bottom:16px}.moreDetails[open]>:not(summary){margin:0 16px}
+
+.brandMark{width:30px;height:30px;object-fit:contain}.brandText{font-weight:700;letter-spacing:.01em;font-size:16px}.brandText b{font-weight:800}
+.loginCard .loginBrand{flex-direction:column;gap:6px;margin-bottom:6px}.loginMark{width:72px;height:72px;object-fit:contain}.loginWord{font-size:24px;font-weight:700;letter-spacing:.01em}.loginWord b{font-weight:800}
+:global([data-theme="memecoinai"]) .loginWord b{color:var(--brand-green)}
+:global([data-theme="memecoinai"]) .brandText b{color:var(--brand-green)}
+:global([data-theme="memecoinai"]) .sidebar{background:var(--surface-1)}
+:global([data-theme="memecoinai"]) .active{background:var(--accent-soft);border-left-color:var(--brand-green);color:#fff}
+:global([data-theme="memecoinai"]) .card{background:var(--surface-1)}
+:global([data-theme="memecoinai"]) .primaryButton{background:linear-gradient(135deg,var(--brand-green),#0e9a48);border-color:var(--brand-green);color:#03130a;font-weight:700}
+:global([data-theme="memecoinai"]) .primaryButton:hover{background:linear-gradient(135deg,var(--brand-green-2),var(--brand-green))}
+:global([data-theme="memecoinai"]) .dangerButton{color:var(--brand-red);border-color:var(--brand-red)}
+
+:global([data-theme="memecoinai"]) .meter i{background:linear-gradient(90deg,var(--brand-green),var(--brand-green-2))}
+

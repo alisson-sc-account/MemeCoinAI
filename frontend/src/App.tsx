@@ -1,3 +1,4 @@
+import { FloatingSellButton } from './features/floating'
 import { ThemeSettings } from './features/theme'
 import { axiomUrl } from './lib/axiom'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
@@ -91,7 +92,7 @@ function TokenDetailPage() {
   const market = t.market
   const exitData = (requestedPositions && exit.data) || t.exit_estimate
   return <>
-    <Heading title={t.token.symbol || t.token.name || 'Token'} sub={`${t.token.chain_id} · ${t.pair?.dex_id || 'sem par'}`} right={<div className={styles.actions}><a className={styles.primaryButton} href={axiomUrl(t.token.address)} target="_blank" rel="noopener noreferrer">Comprar na Axiom ↗</a>{t.pair?.url && <a className={styles.button} href={t.pair.url} target="_blank" rel="noopener noreferrer">DEX Screener ↗</a>}{t.is_tracked && <button className={styles.dangerButton} onClick={() => setConfirm(true)}>Parar de monitorar</button>}</div>}/>
+    <Heading title={t.token.symbol || t.token.name || 'Token'} sub={`${t.token.chain_id} · ${t.pair?.dex_id || 'sem par'}`} right={<div className={styles.actions}><a className={styles.primaryButton} href={axiomUrl(t.token.address)} target="_blank" rel="noopener noreferrer">Comprar na Axiom ↗</a><FloatingSellButton className={styles.button} chainId={t.token.chain_id} address={t.token.address} symbol={t.token.symbol || t.token.name || 'Moeda'}/>{t.pair?.url && <a className={styles.button} href={t.pair.url} target="_blank" rel="noopener noreferrer">DEX Screener ↗</a>}{t.is_tracked && <button className={styles.dangerButton} onClick={() => setConfirm(true)}>Parar de monitorar</button>}</div>}/>
     {t.smart_wallets?.available && <small className="muted">{t.smart_wallets.known_smart === 0 ? 'Carteiras que costumam acertar: ainda aprendendo com as negociações.' : t.smart_wallets.wallets > 0 ? `${t.smart_wallets.wallets} carteira(s) que costumam acertar compraram nos últimos ${t.smart_wallets.minutes} min (${usd(t.smart_wallets.usd)}). Só informação de apoio.` : `Nenhuma das ${t.smart_wallets.known_smart} carteiras que costumam acertar comprou nos últimos ${t.smart_wallets.minutes} min.`}</small>}
     <div className={styles.identity}><FavoriteStar chainId={t.token.chain_id} address={t.token.address} signalId={t.signal?.id} symbol={t.token.symbol}/><Address value={t.token.address}/><FreshnessBadge data={t.freshness}/>{t.scores && <RiskBadge level={t.scores.risk_level} score={t.scores.risk_score}/>}</div>
 

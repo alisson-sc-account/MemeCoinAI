@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from fastapi import Depends, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -28,12 +28,15 @@ def current_session(request: Request, db: Session = Depends(get_db)) -> UserSess
         raise api_error(401, "unauthenticated", "Sessão inválida ou expirada")
     if now - sess.last_seen_at > _TOUCH_INTERVAL:
         sess.last_seen_at = now
+        # "último acesso" é só informativo: desiste em 0,2 s em vez de esperar até 30 s pela trava do coletor
+        # (era isso que deixava a página da moeda em "Carregando" por 10-20 s).
+        db.execute(text("PRAGMA busy_timeout = 200"))
         try:
             db.commit()
         except OperationalError:
-            # "último acesso" é só informativo: com o banco ocupado pelo coletor, não
-            # derruba a requisição; tenta de novo na próxima.
             db.rollback()
+        finally:
+            db.execute(text("PRAGMA busy_timeout = 30000"))
     return sess
 
 

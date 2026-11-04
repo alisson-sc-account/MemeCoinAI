@@ -212,6 +212,13 @@ def analyze_token(db: Session, token: Token, as_of: datetime | None = None, forc
                                      young=as_of - token.first_seen_at < BURST_UNVERIFIED_MAX_AGE)
     if decision.get("action") == "buy" and get_settings().smart_wallet_boost:
         decision = _elite_boost(db, token, pair, decision, as_of)
+    if decision.get("action") == "buy":
+        # Mesma regra do plano de venda: se ele já manda vender tudo (caiu do topo), não pode haver "compre agora".
+        from app.live import service as live
+
+        peak = live.peak_call(db, token.id, prev.reference_price_usd if prev is not None and prev.action == "buy" else None)
+        if peak and peak[0] == 100:
+            decision = {"action": "avoid", "strength": "moderate", "headline": "Evitar: o topo já passou", "reasons": [peak[1]]}
     sig, created = signals.upsert_signal(db, token.id, analysis, decision, estimates, features.get("price_usd"))
     decided = utcnow()
     if snap is not None:
